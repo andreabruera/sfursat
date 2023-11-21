@@ -60,7 +60,6 @@ for row in range(total_rows):
         fluencies[sub][task][cond][cat] = list()
     rts[sub][task][cond][cat].append(rt)
     fluencies[sub][task][cond][cat].append(word)
-import pdb; pdb.set_trace()
 
 word_vecs = dict()
 lemma_vecs = dict()
@@ -73,3 +72,20 @@ for row in tqdm(range(total_rows)):
         word_vecs[word] = ft.get_word_vector(word)
         lemma_vecs[word] = ft.get_word_vector(lemma)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
+vecs = {w : numpy.average([word_vecs[w], lemma_vecs[w]], axis=0) for w in word_vecs.keys()}
+
+curels = {cond : dict() for cond in set(full_dataset['cond'])}
+seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
+switches = {cond : dict() for cond in set(full_dataset['cond'])}
+
+for _, sub_data in tqdm(fluencies.items()):
+    for cond, cond_data in sub_data['sem_fluency'].items():
+        for cat, words in cond_data.items():
+            if cat not in curels.keys():
+                curels[cond][cat] = list()
+                seqrels[cond][cat] = list()
+                switches[cond][cat] = list()
+            curels[cond][cat].append(numpy.average(curel(words, vecs)))
+            seqrels[cond][cat].append(numpy.average(seqrel(words, vecs)))
+            switches[cond][cat].append(switches_and_clusters(words, vecs)[0])
+import pdb; pdb.set_trace()
