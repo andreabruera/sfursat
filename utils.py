@@ -26,7 +26,7 @@ def switches_and_clusters(words, vecs):
     switches = 0
     combs = [(words[i], words[i+1]) for i in range(len(words)-1)]
     for w_one, w_two in combs:
-        sim = 1 -scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
+        sim = 1 - scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
         if sim > threshold:
             pass
         else:

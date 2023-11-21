@@ -1,10 +1,14 @@
 import fasttext
+import matplotlib
+import mne
 import numpy
 import os
 import re
 import scipy
 import spacy
 
+from matplotlib import font_manager, pyplot
+from mne import stats
 from scipy import spatial
 from tqdm import tqdm
 
@@ -81,11 +85,43 @@ switches = {cond : dict() for cond in set(full_dataset['cond'])}
 for _, sub_data in tqdm(fluencies.items()):
     for cond, cond_data in sub_data['sem_fluency'].items():
         for cat, words in cond_data.items():
-            if cat not in curels.keys():
+            if cat not in curels[cond].keys():
                 curels[cond][cat] = list()
                 seqrels[cond][cat] = list()
                 switches[cond][cat] = list()
-            curels[cond][cat].append(numpy.average(curel(words, vecs)))
-            seqrels[cond][cat].append(numpy.average(seqrel(words, vecs)))
+            curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
+            seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
             switches[cond][cat].append(switches_and_clusters(words, vecs)[0])
-import pdb; pdb.set_trace()
+
+### Font setup
+# Using Helvetica as a font
+font_folder = '/import/cogsci/andrea/dataset/fonts/'
+font_dirs = [font_folder, ]
+font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
+for p in font_files:
+    font_manager.fontManager.addfont(p)
+matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
+colors = ['teal', 'goldenrod', 'magenta', 'grey']
+out_folder = 'plots'
+os.makedirs(out_folder, exist_ok=True)
+
+### plotting overall averages
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Across-categories averages for {}'.format(metric)
+    xs = list(results.keys())
+    ys = [[val for v in results[k].values() for val in v] for k in xs]
+    parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold')
+    for pc, color in zip(parts['bodies'], colors):
+        pc.set_facecolor(color)
+        pc.set_edgecolor('black')
+        pc.set_alpha(1)
+        #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+        #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+    ax.set_ylabel('Across-categories average {}'.format(metric))
+    ax.set_title(title)
+    pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
+    pyplot.clf()
+    pyplot.close()
