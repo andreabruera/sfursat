@@ -110,7 +110,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
     fig, ax = pyplot.subplots(constrained_layout=True)
     title = 'Across-categories averages for {}'.format(metric)
     xs = list(results.keys())
-    ys = [[val for v in results[k].values() for val in v] for k in xs]
+    ys = [[numpy.nanmean(v) for v in results[k].values()] for k in xs]
     parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
     ax.set_xticks(range(len(xs)))
     ax.set_xticklabels(xs, fontweight='bold')
