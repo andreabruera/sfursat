@@ -56,8 +56,6 @@ for row in range(total_rows):
     sub = int(full_dataset['participant'][row])
     task = full_dataset['task'][row]
     cond = full_dataset['cond'][row]
-    if cond == 'NA':
-        import pdb; pdb.set_trace()
     cat = full_dataset['item'][row]
     rt = float(full_dataset['rt'][row])
     word = full_dataset['response'][row].strip()
@@ -122,6 +120,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         pc.set_alpha(1)
         #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
         #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+    ax.scatter(range(len(xs)), [[numpy.average(v) for v in results[k].values()] for k in xs],zorder=3, color=white, marker='D')
     ax.set_ylabel('Across-categories average {}'.format(metric))
     ax.set_title(title)
     pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
