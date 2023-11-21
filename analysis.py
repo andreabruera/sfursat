@@ -9,7 +9,7 @@ import spacy
 
 from matplotlib import font_manager, pyplot
 from mne import stats
-from scipy import spatial
+from scipy import spatial, stats
 from tqdm import tqdm
 
 from utils import curel, seqrel, switches_and_clusters
@@ -121,9 +121,27 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         pc.set_alpha(1)
         #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
         #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
-    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='D')
+    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='_')
     ax.set_ylabel('Across-categories average {}'.format(metric))
     ax.set_title(title)
+    ### p-values
+    p_vals = list()
+    for k_one, v_one in results.items():
+        one = [val for v in v_one.values() for val in v]
+        for k_two, v_two in results.items():
+            two = [val for v in v_two.values() for val in v]
+            if k_one == k_two:
+                continue
+            key = tuple(sorted([k_one, k_two]))
+            if key not in [p[0] for p in p_vals]:
+                p = scipy.stats.ttest_ind(one, two)[0]
+                p_vals.append([key, p])
+    import pdb; pdb.set_trace()
+    ### fdr correction
+    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+    corrected_p_vals = {k[0] : v for k, v in zip(p_vals, correct_ps)}
+    print(corrected_p_vals)
+
     pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
     pyplot.clf()
     pyplot.close()
