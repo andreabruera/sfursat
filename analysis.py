@@ -109,7 +109,8 @@ os.makedirs(out_folder, exist_ok=True)
 for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
     fig, ax = pyplot.subplots(constrained_layout=True)
     title = 'Across-categories averages for {}'.format(metric)
-    xs = list(results.keys())
+    #xs = list(results.keys())
+    xs = ['IFG', 'preSMA', 'dual', 'sham']
     ys = [[val for v in results[k].values() for val in v] for k in xs]
     parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
     ax.set_xticks(range(len(xs)))
@@ -120,7 +121,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         pc.set_alpha(1)
         #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
         #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
-    ax.scatter(range(len(xs)), [[numpy.average(v) for v in results[k].values()] for k in xs],zorder=3, color=white, marker='D')
+    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='D')
     ax.set_ylabel('Across-categories average {}'.format(metric))
     ax.set_title(title)
     pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
