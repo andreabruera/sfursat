@@ -56,6 +56,8 @@ for row in range(total_rows):
     sub = int(full_dataset['participant'][row])
     task = full_dataset['task'][row]
     cond = full_dataset['cond'][row]
+    if cond == 'NA':
+        import pdb; pdb.set_trace()
     cat = full_dataset['item'][row]
     rt = float(full_dataset['rt'][row])
     word = full_dataset['response'][row].strip()
@@ -110,7 +112,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
     fig, ax = pyplot.subplots(constrained_layout=True)
     title = 'Across-categories averages for {}'.format(metric)
     xs = list(results.keys())
-    ys = [[numpy.nanmean(v) for v in results[k].values()] for k in xs]
+    ys = [[val for v in results[k].values() for val in v] for k in xs]
     parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
     ax.set_xticks(range(len(xs)))
     ax.set_xticklabels(xs, fontweight='bold')
