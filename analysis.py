@@ -15,7 +15,7 @@ from mne import stats
 from scipy import spatial, stats
 from tqdm import tqdm
 
-from utils import curel, seqrel, switches_and_clusters
+from utils import curel, seqrel, switches_and_clusters, temporal_analysis
 
 spacy_model = spacy.load('de_core_news_lg')
 
@@ -55,8 +55,6 @@ fluencies = {int(sub) : {
                      } 
                      for sub in set(full_dataset['participant'])
                      }
-
-spell = spellchecker.SpellChecker(language='de')
 
 for row in tqdm(range(total_rows)):
     sub = int(full_dataset['participant'][row])
@@ -109,6 +107,7 @@ for row in tqdm(range(total_rows)):
 curels = {cond : dict() for cond in set(full_dataset['cond'])}
 seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
 switches = {cond : dict() for cond in set(full_dataset['cond'])}
+temporal_correlations = {cond : dict() for cond in set(full_dataset['cond'])}
 
 for _, sub_data in tqdm(fluencies.items()):
     for cond, cond_data in sub_data['sem_fluency'].items():
@@ -117,10 +116,12 @@ for _, sub_data in tqdm(fluencies.items()):
                 curels[cond][cat] = list()
                 seqrels[cond][cat] = list()
                 switches[cond][cat] = list()
-            words = [w for w in words if w in vecs.keys()]
+                temporal_correlations[cond][cat] = list()
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
             switches[cond][cat].append(switches_and_clusters(words, vecs)[0])
+            current_rts = rts[_]['sem_fluency'][cond][cat]
+            temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
 
 ### Font setup
 # Using Helvetica as a font
@@ -230,3 +231,52 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
         pyplot.clf()
         pyplot.close()
+
+### temporal analysis
+temporal_folder = os.path.join(out_folder, 'temporal')
+os.makedirs(temporal_folder, exist_ok=True)
+### plotting overall averages
+fig, ax = pyplot.subplots(constrained_layout=True)
+title = 'Across-categories averages for temporal correlations with RTs'
+#xs = list(results.keys())
+xs = ['IFG', 'preSMA', 'dual', 'sham']
+ys = [[val for v in temporal_correlations[k].values() for val in v] for k in xs]
+parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+ax.set_xticks(range(len(xs)))
+ax.set_xticklabels(xs, fontweight='bold')
+for pc, color in zip(parts['bodies'], colors):
+    pc.set_facecolor(color)
+    pc.set_edgecolor('black')
+    pc.set_alpha(1)
+    #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+    #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+ax.scatter(range(len(xs)), [numpy.average([val for v in temporal_correlations[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='_')
+ax.set_ylabel('Across-categories average temporal correlation with RTs')
+ax.set_title(title)
+### p-values
+p_vals = list()
+for k_one, v_one in temporal_correlations.items():
+    one = [val for v in v_one.values() for val in v]
+    for k_two, v_two in temporal_correlations.items():
+        two = [val for v in v_two.values() for val in v]
+        if k_one == k_two:
+            continue
+        key = tuple(sorted([k_one, k_two]))
+        if key not in [p[0] for p in p_vals]:
+            p = scipy.stats.ttest_ind(
+                                  one, 
+                                  two, 
+                                  #permutations=4096, 
+                                  #alternative=direction,
+                                  ).pvalue
+            p_vals.append([key, p])
+### fdr correction
+correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+with open(os.path.join(temporal_folder, 'temporal_p-vals_comparisons.tsv'), 'w') as o:
+    o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
+    for a, b in zip(p_vals, correct_ps):
+        o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
+
+pyplot.savefig(os.path.join(temporal_folder, 'temporal_average.jpg'))
+pyplot.clf()
+pyplot.close()
