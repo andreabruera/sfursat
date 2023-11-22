@@ -132,10 +132,11 @@ for p in font_files:
 matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
 colors = ['teal', 'goldenrod', 'magenta', 'grey']
 out_folder = 'plots'
-os.makedirs(out_folder, exist_ok=True)
 
-### plotting overall averages
 for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
     fig, ax = pyplot.subplots(constrained_layout=True)
     title = 'Across-categories averages for {}'.format(metric)
     #xs = list(results.keys())
@@ -163,18 +164,6 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                 continue
             key = tuple(sorted([k_one, k_two]))
             if key not in [p[0] for p in p_vals]:
-                '''
-                if key[0] == 'sham' and 'Rel' in metric:
-                    direction = 'greater'
-                elif key[1] == 'sham' and 'Rel' in metric:
-                    direction = 'less'
-                elif key[0] == 'sham':
-                    direction = 'less'
-                elif key[1] == 'sham':
-                    direction = 'greater'
-                else:
-                    direction = 'two-sided'
-                '''
                 p = scipy.stats.ttest_ind(
                                       one, 
                                       two, 
@@ -184,11 +173,60 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                 p_vals.append([key, p])
     ### fdr correction
     correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-    with open(os.path.join(out_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
         o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
         for a, b in zip(p_vals, correct_ps):
             o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
 
-    pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
+    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
     pyplot.clf()
     pyplot.close()
+    ### per-category plots
+    for cat in results['sham'].keys():
+        cat_folder = os.path.join(out_folder, cat)
+        os.makedirs(cat_folder, exist_ok=True)
+        ### plotting overall averages
+        fig, ax = pyplot.subplots(constrained_layout=True)
+        title = '{} scores for {}'.format(metric, cat)
+        #xs = list(results.keys())
+        xs = ['IFG', 'preSMA', 'dual', 'sham']
+        ys = [results[k][cat] for k in xs]
+        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+        ax.set_xticks(range(len(xs)))
+        ax.set_xticklabels(xs, fontweight='bold')
+        for pc, color in zip(parts['bodies'], colors):
+            pc.set_facecolor(color)
+            pc.set_edgecolor('black')
+            pc.set_alpha(1)
+            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
+        ax.set_ylabel('{}'.format(metric))
+        ax.set_title(title)
+        ### p-values
+        p_vals = list()
+        for k_one, v_one in results.items():
+            one = v_one[cat]
+            for k_two, v_two in results.items():
+                two = v_two[cat]
+                if k_one == k_two:
+                    continue
+                key = tuple(sorted([k_one, k_two]))
+                if key not in [p[0] for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one, 
+                                          two, 
+                                          #permutations=4096, 
+                                          #alternative=direction,
+                                          ).pvalue
+                    p_vals.append([key, p])
+        ### fdr correction
+        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
+            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
+            for a, b in zip(p_vals, correct_ps):
+                o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
+
+        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
+        pyplot.clf()
+        pyplot.close()
