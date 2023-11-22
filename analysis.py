@@ -1,11 +1,14 @@
+import charsplit
 import fasttext
 import matplotlib
 import mne
 import numpy
 import os
+import pickle
 import re
 import scipy
 import spacy
+import spellchecker
 
 from matplotlib import font_manager, pyplot
 from mne import stats
@@ -52,7 +55,10 @@ fluencies = {int(sub) : {
                      } 
                      for sub in set(full_dataset['participant'])
                      }
-for row in range(total_rows):
+
+spell = spellchecker.SpellChecker(language='de')
+
+for row in tqdm(range(total_rows)):
     sub = int(full_dataset['participant'][row])
     task = full_dataset['task'][row]
     cond = full_dataset['cond'][row]
@@ -77,6 +83,28 @@ for row in tqdm(range(total_rows)):
         lemma_vecs[word] = ft.get_word_vector(lemma)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
 vecs = {w : numpy.average([word_vecs[w], lemma_vecs[w]], axis=0) for w in word_vecs.keys()}
+'''
+### load conceptnet
+vecs = dict()
+with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
+    conceptnet = pickle.load(i)
+missing_words = list()
+splitter = charsplit.Splitter()
+for row in tqdm(range(total_rows)):
+    task = full_dataset['task'][row]
+    if 'sem' in task:
+        word = full_dataset['response'][row].strip().lower()
+        if word not in conceptnet.keys():
+            split = splitter.split_compound(word)[0][1:]
+            counter = [sub.lower() in conceptnet.keys() for sub in split]
+            if True not in counter:
+                missing_words.append(word)
+            else:
+                vec = numpy.average([conceptnet[sub] for sub in split if sub in conceptnet.keys()], axis=0)
+        else:
+            vec = conceptnet[word]
+        vecs[word] = vec
+'''
 
 curels = {cond : dict() for cond in set(full_dataset['cond'])}
 seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
@@ -89,6 +117,7 @@ for _, sub_data in tqdm(fluencies.items()):
                 curels[cond][cat] = list()
                 seqrels[cond][cat] = list()
                 switches[cond][cat] = list()
+            words = [w for w in words if w in vecs.keys()]
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
             switches[cond][cat].append(switches_and_clusters(words, vecs)[0])
@@ -134,13 +163,31 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                 continue
             key = tuple(sorted([k_one, k_two]))
             if key not in [p[0] for p in p_vals]:
-                p = scipy.stats.ttest_ind(one, two)[0]
+                '''
+                if key[0] == 'sham' and 'Rel' in metric:
+                    direction = 'greater'
+                elif key[1] == 'sham' and 'Rel' in metric:
+                    direction = 'less'
+                elif key[0] == 'sham':
+                    direction = 'less'
+                elif key[1] == 'sham':
+                    direction = 'greater'
+                else:
+                    direction = 'two-sided'
+                '''
+                p = scipy.stats.ttest_ind(
+                                      one, 
+                                      two, 
+                                      #permutations=4096, 
+                                      #alternative=direction,
+                                      ).pvalue
                 p_vals.append([key, p])
-    import pdb; pdb.set_trace()
     ### fdr correction
     correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-    corrected_p_vals = {k[0] : v for k, v in zip(p_vals, correct_ps)}
-    print(corrected_p_vals)
+    with open(os.path.join(out_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
+        for a, b in zip(p_vals, correct_ps):
+            o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
 
     pyplot.savefig(os.path.join(out_folder, '{}_average.jpg'.format(metric)))
     pyplot.clf()
