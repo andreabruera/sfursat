@@ -16,6 +16,7 @@ from scipy import spatial, stats
 from tqdm import tqdm
 
 from utils import curel, seqrel, switches_and_clusters, temporal_analysis
+from utf_utils import transform_german_word
 
 spacy_model = spacy.load('de_core_news_lg')
 
@@ -71,6 +72,7 @@ for row in tqdm(range(total_rows)):
 
 word_vecs = dict()
 lemma_vecs = dict()
+corr_vecs = dict()
 ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
 for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
@@ -79,29 +81,42 @@ for row in tqdm(range(total_rows)):
         lemma = ' '.join([w.lemma_ for w in spacy_model(word)]).lower()
         word_vecs[word] = ft.get_word_vector(word)
         lemma_vecs[word] = ft.get_word_vector(lemma)
+        corr_vecs[word] = ft.get_word_vector(transform_german_word(word))
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
-vecs = {w : numpy.average([word_vecs[w], lemma_vecs[w]], axis=0) for w in word_vecs.keys()}
+vecs = {w : numpy.average(
+                          [
+                           #word_vecs[w], 
+                           #lemma_vecs[w], 
+                           corr_vecs[w],
+                           ], axis=0) for w in word_vecs.keys()}
 '''
 ### load conceptnet
 vecs = dict()
 with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
     conceptnet = pickle.load(i)
-missing_words = list()
+missing_words = set()
 splitter = charsplit.Splitter()
 for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
     if 'sem' in task:
-        word = full_dataset['response'][row].strip().lower()
-        if word not in conceptnet.keys():
-            split = splitter.split_compound(word)[0][1:]
-            counter = [sub.lower() in conceptnet.keys() for sub in split]
-            if True not in counter:
-                missing_words.append(word)
-            else:
-                vec = numpy.average([conceptnet[sub] for sub in split if sub in conceptnet.keys()], axis=0)
-        else:
-            vec = conceptnet[word]
-        vecs[word] = vec
+        word = full_dataset['response'][row].strip()
+        if word.lower() not in conceptnet.keys():
+            new_word = transform_german_word(word)
+            if new_word not in conceptnet.keys():
+                missing_words.add(word)
+        #    split = splitter.split_compound(word)[0][1:]
+        #    counter = [sub.lower() in conceptnet.keys() for sub in split]
+        #    if True not in counter:
+        #        missing_words.append(word)
+        #    else:
+        #        vec = numpy.average([conceptnet[sub] for sub in split if sub in conceptnet.keys()], axis=0)
+        #else:
+        #    vec = conceptnet[word]
+        #vecs[word] = vec
+with open('to_be_checked.tsv', 'w') as o:
+    for w in missing_words:
+        o.write(w)
+        o.write('\n')
 '''
 
 curels = {cond : dict() for cond in set(full_dataset['cond'])}
