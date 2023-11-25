@@ -74,14 +74,23 @@ word_vecs = dict()
 lemma_vecs = dict()
 corr_vecs = dict()
 ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
+ft_vocab = {w : w for w in ft.words}
+### load conceptnet
+vecs = dict()
+with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
+    conceptnet = pickle.load(i)
 for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
     if 'sem' in task:
         word = full_dataset['response'][row].strip()
         lemma = ' '.join([w.lemma_ for w in spacy_model(word)]).lower()
-        word_vecs[word] = ft.get_word_vector(word)
-        lemma_vecs[word] = ft.get_word_vector(lemma)
-        corr_vecs[word] = ft.get_word_vector(transform_german_word(word))
+        word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
+        lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma.split()], axis=0)
+        corr_word = transform_german_word(word, ft_vocab)
+        corr_toks = [w for c_w in corr_word for w in c_w.split()]
+        #if len(corr_toks) > 1:
+        print(corr_toks)
+        corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
 vecs = {w : numpy.average(
                           [
@@ -90,10 +99,6 @@ vecs = {w : numpy.average(
                            corr_vecs[w],
                            ], axis=0) for w in word_vecs.keys()}
 '''
-### load conceptnet
-vecs = dict()
-with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
-    conceptnet = pickle.load(i)
 missing_words = set()
 splitter = charsplit.Splitter()
 for row in tqdm(range(total_rows)):
@@ -101,7 +106,7 @@ for row in tqdm(range(total_rows)):
     if 'sem' in task:
         word = full_dataset['response'][row].strip()
         if word.lower() not in conceptnet.keys():
-            new_word = transform_german_word(word)
+            new_word = re.sub('\W', '_', transform_german_word(word, conceptnet))
             if new_word not in conceptnet.keys():
                 missing_words.add(word)
         #    split = splitter.split_compound(word)[0][1:]
@@ -117,6 +122,7 @@ with open('to_be_checked.tsv', 'w') as o:
     for w in missing_words:
         o.write(w)
         o.write('\n')
+import pdb; pdb.set_trace()
 '''
 
 curels = {cond : dict() for cond in set(full_dataset['cond'])}
