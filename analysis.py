@@ -133,14 +133,29 @@ temporal_correlations = {cond : dict() for cond in set(full_dataset['cond'])}
 
 ### computing thresholds
 thresholds = {'overall' : list()}
+cond_thresholds = dict()
+subject_thresholds = {s : {'overall' : list()} for s in fluencies.keys()}
 for _, sub_data in tqdm(fluencies.items()):
     for cond, cond_data in sub_data['sem_fluency'].items():
         for cat, words in cond_data.items():
             thresholds['overall'].extend(seqrel(words, vecs))
+            subject_thresholds[_]['overall'].extend(seqrel(words, vecs))
             if cat not in thresholds.keys():
                 thresholds[cat] = list()
+            if cat not in subject_thresholds.keys():
+                subject_thresholds[_][cat] = list()
+            if cond not in cond_thresholds.keys():
+                cond_thresholds[cond] = dict()
+                cond_thresholds[cond]['overall'] = list()
+            if cat not in cond_thresholds[cond].keys():
+                cond_thresholds[cond][cat] = list()
             thresholds[cat].extend(seqrel(words, vecs))
+            subject_thresholds[_][cat].extend(seqrel(words, vecs))
+            cond_thresholds[cond]['overall'].extend(seqrel(words, vecs))
+            cond_thresholds[cond][cat].extend(seqrel(words, vecs))
 thresholds = {k : numpy.median(v) for k, v in thresholds.items()}
+subject_thresholds = {s : {k : numpy.median(v) for k, v in thresh.items()} for s , thresh in subject_thresholds.items()}
+cond_thresholds = {s : {k : numpy.median(v) for k, v in thresh.items()} for s , thresh in cond_thresholds.items()}
 
 for _, sub_data in tqdm(fluencies.items()):
     for cond, cond_data in sub_data['sem_fluency'].items():
@@ -152,7 +167,7 @@ for _, sub_data in tqdm(fluencies.items()):
                 temporal_correlations[cond][cat] = list()
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
-            switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
+            switches[cond][cat].append(switches_and_clusters(words, vecs, cond_thresholds[cond][cat])[0])
             current_rts = rts[_]['sem_fluency'][cond][cat]
             temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
 

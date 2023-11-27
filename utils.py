@@ -20,12 +20,14 @@ def seqrel(words, vecs):
     return sims
 
 def switches_and_clusters(words, vecs, threshold):
+    ### threshold
     all_combs = set([tuple(sorted([a, b])) for a in words for b in words])
     sims = list()
     for w_one, w_two in all_combs:
         sim = 1 -scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
         sims.append(sim)
-    #threshold = numpy.median(sims)
+    threshold = numpy.median(sims)
+    ### clusters
     clusters = 1
     switches = 0
     combs = [(words[i], words[i+1]) for i in range(len(words)-1)]
@@ -36,6 +38,7 @@ def switches_and_clusters(words, vecs, threshold):
         else:
             clusters += 1
             switches += 1
+    #switches = switches / len(all_combs)
     return switches, clusters
 
 def temporal_analysis(words, vecs, rts):
