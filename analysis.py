@@ -167,7 +167,8 @@ for _, sub_data in tqdm(fluencies.items()):
                 temporal_correlations[cond][cat] = list()
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
-            switches[cond][cat].append(switches_and_clusters(words, vecs, cond_thresholds[cond][cat])[0])
+            ### overall threshold as in Kim et al. 2019
+            switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
             current_rts = rts[_]['sem_fluency'][cond][cat]
             temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
 
