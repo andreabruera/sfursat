@@ -8,7 +8,6 @@ import pickle
 import re
 import scipy
 import spacy
-import spellchecker
 
 from matplotlib import font_manager, pyplot
 from mne import stats
@@ -83,19 +82,21 @@ for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
     if 'sem' in task:
         word = full_dataset['response'][row].strip()
-        lemma = ' '.join([w.lemma_ for w in spacy_model(word)]).lower()
         word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
-        lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma.split()], axis=0)
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = [w for c_w in corr_word for w in c_w.split()]
         #if len(corr_toks) > 1:
         print(corr_toks)
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
+        lemma_corr_toks = [w.lemma_ for c_w in corr_word for w in spacy_model(c_w)]
+        lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma_corr_toks], axis=0)
+        #lemma = ' '.join([w.lemma_ for w in spacy_model(word)]).lower()
+        #lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma.split()], axis=0)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
 vecs = {w : numpy.average(
                           [
                            #word_vecs[w], 
-                           #lemma_vecs[w], 
+                           lemma_vecs[w], 
                            corr_vecs[w],
                            ], axis=0) for w in word_vecs.keys()}
 '''
