@@ -96,7 +96,7 @@ for row in tqdm(range(total_rows)):
 vecs = {w : numpy.average(
                           [
                            #word_vecs[w], 
-                           lemma_vecs[w], 
+                           #lemma_vecs[w], 
                            corr_vecs[w],
                            ], axis=0) for w in word_vecs.keys()}
 '''
