@@ -86,7 +86,7 @@ for row in tqdm(range(total_rows)):
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = [w for c_w in corr_word for w in c_w.split()]
         #if len(corr_toks) > 1:
-        print(corr_toks)
+        #print(corr_toks)
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         lemma_corr_toks = [w.lemma_ for c_w in corr_word for w in spacy_model(c_w)]
         lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma_corr_toks], axis=0)
@@ -131,6 +131,17 @@ seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
 switches = {cond : dict() for cond in set(full_dataset['cond'])}
 temporal_correlations = {cond : dict() for cond in set(full_dataset['cond'])}
 
+### computing thresholds
+thresholds = {'overall' : list()}
+for _, sub_data in tqdm(fluencies.items()):
+    for cond, cond_data in sub_data['sem_fluency'].items():
+        for cat, words in cond_data.items():
+            thresholds['overall'].extend(seqrel(words, vecs))
+            if cat not in thresholds.keys():
+                thresholds[cat] = list()
+            thresholds[cat].extend(seqrel(words, vecs))
+thresholds = {k : numpy.median(v) for k, v in thresholds.items()}
+
 for _, sub_data in tqdm(fluencies.items()):
     for cond, cond_data in sub_data['sem_fluency'].items():
         for cat, words in cond_data.items():
@@ -141,7 +152,7 @@ for _, sub_data in tqdm(fluencies.items()):
                 temporal_correlations[cond][cat] = list()
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
-            switches[cond][cat].append(switches_and_clusters(words, vecs)[0])
+            switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
             current_rts = rts[_]['sem_fluency'][cond][cat]
             temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
 
