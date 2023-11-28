@@ -78,6 +78,8 @@ vecs = dict()
 word_vecs = dict()
 lemma_vecs = dict()
 corr_vecs = dict()
+to_be_checked = list()
+
 with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
     conceptnet = pickle.load(i)
 for row in tqdm(range(total_rows)):
@@ -87,6 +89,7 @@ for row in tqdm(range(total_rows)):
         word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = [w for c_w in corr_word for w in c_w.split()]
+        print(corr_toks)
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         ### lemma
         #lemma_corr_toks = [w.lemma_ for c_w in corr_word for w in spacy_model(c_w)]
@@ -94,6 +97,32 @@ for row in tqdm(range(total_rows)):
         #lemma = ' '.join([w.lemma_ for w in spacy_model(word)]).lower()
         #lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma.split()], axis=0)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
+        ### words to be checked
+        check = list()
+        for full_w in corr_toks:
+            counter = 0
+            if len(full_w.split()) == 1:
+                if full_w not in ft_vocab.keys():
+                    check.append(False)
+                else:
+                    check.append(True)
+            else:
+                within_w = list()
+                for w in full_w.split():
+                    if w not in ft_vocab.keys():
+                        within_w.append(False)
+                    else:
+                        within_w.append(True)
+                if False not in within_w:
+                    check.append(True)
+                else:
+                    check.append(False)
+        if True not in check:
+            to_be_checked.append(word)
+with open('to_be_checked.tsv', 'w') as o:
+    for w in to_be_checked:
+        o.write('{}\tx\n'.format(w))
+
 vecs = {w : numpy.average(
                           [
                            #word_vecs[w], 

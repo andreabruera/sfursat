@@ -28,5 +28,10 @@ def transform_german_word(word, model):
             for w in ss_versions:
                 corr_word = w.replace('ss', 'ß')
                 versions.append(corr_word)
-    versions = set([w for w in versions if w in model.keys()] + [word])
+    versions = set(
+                   [w for w in versions if w in model.keys()] + \
+                   [w.capitalize() for w in versions if w in model.keys()] +\
+                   [word.capitalize()] + \
+                   [word],
+                   )
     return versions
