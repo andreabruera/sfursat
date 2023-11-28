@@ -1,7 +1,4 @@
-comparison	uncorrected_p-value	FDR-corrected_p-value
-('preSMA', 'sham')	0.710438814493981	0.8888829341393897
-('dual', 'sham')	0.6521775110192742	0.8888829341393897
-('IFG', 'sham')	0.9681251348565881	0.9681251348565881
-('dual', 'preSMA')	0.49717061869285495	0.8888829341393897
-('IFG', 'preSMA')	0.7407357784494915	0.8888829341393897
-('IFG', 'dual')	0.6408719311570719	0.8888829341393897
+comparison	uncorrected_p-value	FDR-corrected_p-value	averages
+['sham', 'dual']	0.3261	0.6448	[0.506, 0.498]
+['sham', 'IFG']	0.5159	0.6448	[0.506, 0.507]
+['sham', 'preSMA']	0.6448	0.6448	[0.506, 0.513]

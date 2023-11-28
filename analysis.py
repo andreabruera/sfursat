@@ -89,7 +89,7 @@ for row in tqdm(range(total_rows)):
         word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = [w for c_w in corr_word for w in c_w.split()]
-        print(corr_toks)
+        #print(corr_toks)
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         ### lemma
         #lemma_corr_toks = [w.lemma_ for c_w in corr_word for w in spacy_model(c_w)]
@@ -218,6 +218,7 @@ matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
 colors = ['teal', 'goldenrod', 'magenta', 'grey']
 out_folder = 'plots'
 
+### violin plot
 for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
     overall_folder = os.path.join(out_folder, 'overall')
     os.makedirs(overall_folder, exist_ok=True)
@@ -241,27 +242,33 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
     ax.set_title(title)
     ### p-values
     p_vals = list()
+    avgs = list()
+    medians = list()
     for k_one, v_one in results.items():
         one = [val for v in v_one.values() for val in v]
         for k_two, v_two in results.items():
             two = [val for v in v_two.values() for val in v]
             if k_one == k_two:
                 continue
-            key = tuple(sorted([k_one, k_two]))
-            if key not in [p[0] for p in p_vals]:
-                p = scipy.stats.ttest_ind(
-                                      one, 
-                                      two, 
-                                      #permutations=4096, 
-                                      #alternative=direction,
-                                      ).pvalue
-                p_vals.append([key, p])
+            key = [k_one, k_two]
+            if 'sham' in key:
+                alternative = 'greater' if k_one=='sham' else 'less'
+                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one, 
+                                          two, 
+                                          #permutations=4096, 
+                                          alternative=alternative,
+                                          ).pvalue
+                    p_vals.append([[k_one, k_two], round(p, 4)])
+                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                    medians.append([numpy.median(one), numpy.median(two)])
     ### fdr correction
     correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
     with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
-        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
-        for a, b in zip(p_vals, correct_ps):
-            o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+        for a, b, c in zip(p_vals, correct_ps, avgs):
+            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
 
     pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
     pyplot.clf()
@@ -290,27 +297,33 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         ax.set_title(title)
         ### p-values
         p_vals = list()
+        avgs = list()
+        medians = list()
         for k_one, v_one in results.items():
             one = v_one[cat]
             for k_two, v_two in results.items():
                 two = v_two[cat]
                 if k_one == k_two:
                     continue
-                key = tuple(sorted([k_one, k_two]))
-                if key not in [p[0] for p in p_vals]:
-                    p = scipy.stats.ttest_ind(
-                                          one, 
-                                          two, 
-                                          #permutations=4096, 
-                                          #alternative=direction,
-                                          ).pvalue
-                    p_vals.append([key, p])
+                key = [k_one, k_two]
+                if 'sham' in key:
+                    alternative = 'greater' if k_one=='sham' else 'less'
+                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                        p = scipy.stats.ttest_ind(
+                                              one, 
+                                              two, 
+                                              #permutations=4096, 
+                                              alternative=alternative,
+                                              ).pvalue
+                        p_vals.append([[k_one, k_two], round(p, 4)])
+                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                        medians.append([numpy.median(one), numpy.median(two)])
         ### fdr correction
         correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
         with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
-            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\n')
-            for a, b in zip(p_vals, correct_ps):
-                o.write('{}\t{}\t{}\n'.format(a[0], a[1], b))
+            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+            for a, b, c in zip(p_vals, correct_ps, avgs):
+                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
 
         pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
         pyplot.clf()
@@ -350,7 +363,7 @@ for k_one, v_one in temporal_correlations.items():
             p = scipy.stats.ttest_ind(
                                   one, 
                                   two, 
-                                  #permutations=4096, 
+                                  permutations=4096, 
                                   #alternative=direction,
                                   ).pvalue
             p_vals.append([key, p])
