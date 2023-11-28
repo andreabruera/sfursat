@@ -119,8 +119,9 @@ for row in tqdm(range(total_rows)):
                     check.append(False)
         if True not in check:
             to_be_checked.append(word)
+            
 with open('to_be_checked.tsv', 'w') as o:
-    for w in to_be_checked:
+    for w in set(to_be_checked):
         o.write('{}\tx\n'.format(w))
 
 vecs = {w : numpy.average(
