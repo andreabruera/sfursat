@@ -35,6 +35,15 @@ with open(os.path.join('data', 'all_tasks.tsv')) as i:
             full_dataset[h].append(val)
 total_rows = l_i
 
+### metrics vs difficulty
+difficulties = dict()
+with open(os.path.join('data', 'category_ranking.tsv')) as i:
+    for l_i, l in enumerate(i):
+        if l_i==0:
+            continue
+        line = l.strip().split('\t')
+        difficulties[line[0]] = float(line[2])
+
 rts = {int(sub) : {
                      task : {
                          cond : {
@@ -216,6 +225,12 @@ for p in font_files:
     font_manager.fontManager.addfont(p)
 matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
 colors = ['teal', 'goldenrod', 'magenta', 'grey']
+colors_dict = {
+               'IFG' : 'teal', 
+               'preSMA' : 'goldenrod', 
+               'dual' : 'magenta', 
+               'sham' : 'grey',
+               }
 out_folder = 'plots'
 
 ### violin plot
@@ -377,3 +392,26 @@ with open(os.path.join(temporal_folder, 'temporal_p-vals_comparisons.tsv'), 'w')
 pyplot.savefig(os.path.join(temporal_folder, 'temporal_average.jpg'))
 pyplot.clf()
 pyplot.close()
+
+
+xs = [k[0] for k in sorted(difficulties.items(), key=lambda item : item[1], reverse=True)]
+
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Averages (y) vs increasing category difficulty (x) for {}'.format(metric)
+    dual_ys = [numpy.average(results['dual'][k]) for k in xs]
+    sham_ys = [numpy.average(results['sham'][k]) for k in xs]
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold', rotation=45)
+    ax.set_ylabel('Average {}'.format(metric))
+    ax.set_xlabel('Categories (easier -> harder)')
+    ax.set_title(title)
+    ax.plot(range(len(xs)), dual_ys, color=colors_dict['dual'], label='dual')
+    ax.plot(range(len(xs)), sham_ys, color=colors_dict['sham'], label='sham')
+    ax.legend()
+    pyplot.savefig(os.path.join(overall_folder, '{}_difficulties.jpg'.format(metric)))
+    pyplot.clf()
+    pyplot.close()
