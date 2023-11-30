@@ -400,7 +400,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
     overall_folder = os.path.join(out_folder, 'overall')
     os.makedirs(overall_folder, exist_ok=True)
     ### plotting overall averages
-    fig, ax = pyplot.subplots(constrained_layout=True)
+    fig, ax = pyplot.subplots(constrained_layout=True, figsize=(16, 9))
     title = 'Averages (y) vs increasing category difficulty (x) for {}'.format(metric)
     dual_ys = [numpy.average(results['dual'][k]) for k in xs]
     sham_ys = [numpy.average(results['sham'][k]) for k in xs]

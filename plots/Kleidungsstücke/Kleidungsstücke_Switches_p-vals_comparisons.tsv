@@ -1,4 +1,4 @@
 comparison	uncorrected_p-value	FDR-corrected_p-value	averages
-['IFG', 'sham']	0.5293	0.6554	[12.667, 12.5]
-['preSMA', 'sham']	0.6554	0.6554	[13.667, 12.5]
-['sham', 'dual']	0.2821	0.6554	[12.5, 10.833]
+['dual', 'sham']	0.2821	0.6554	[10.833, 12.5]
+['sham', 'IFG']	0.5293	0.6554	[12.5, 12.667]
+['sham', 'preSMA']	0.6554	0.6554	[12.5, 13.667]
