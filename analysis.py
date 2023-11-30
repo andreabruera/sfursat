@@ -97,7 +97,7 @@ for row in tqdm(range(total_rows)):
         word = full_dataset['response'][row].strip()
         word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
         corr_word = transform_german_word(word, ft_vocab)
-        corr_toks = [w for c_w in corr_word for w in c_w.split()]
+        corr_toks = set([w for c_w in corr_word for w in c_w.split()])
         #print(corr_toks)
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         ### lemma
@@ -213,7 +213,9 @@ for _, sub_data in tqdm(fluencies.items()):
             curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
             seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
             ### overall threshold as in Kim et al. 2019
-            switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
+            #switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
+            ### category-specific threshold as Ocalam et al. 2022
+            switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds[cat])[0])
             current_rts = rts[_]['sem_fluency'][cond][cat]
             temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
 
