@@ -18,6 +18,7 @@ def transform_german_word(word, model):
             for w in oe_versions:
                 corr_word = w.replace('oe', 'ö')
                 versions.append(corr_word)
+            #print(versions)
         if 'ue' in word:
             ue_versions = [w for w in versions]
             for w in ue_versions:
@@ -29,9 +30,12 @@ def transform_german_word(word, model):
                 corr_word = w.replace('ss', 'ß')
                 versions.append(corr_word)
     versions = set(
-                   [w for w in versions if w in model.keys()] + \
-                   [w.capitalize() for w in versions if w in model.keys()] +\
-                   [word.capitalize()] + \
+                   ### capitalized
+                   [' '.join([tok.capitalize() for tok in w.split()]) for w in versions] +\
+                   [' '.join([tok.capitalize() for tok in word.split()])] + \
+                   ### non-capitalized
+                   [w for w in versions] + \
                    [word],
                    )
+    print(versions)
     return versions

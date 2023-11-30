@@ -130,8 +130,9 @@ for row in tqdm(range(total_rows)):
             to_be_checked.append(word)
             
 with open('to_be_checked.tsv', 'w') as o:
+    o.write('original_transcription\tcorrected_spelling\tother_variants_(e.g._split_compounds)\n')
     for w in set(to_be_checked):
-        o.write('{}\tx\n'.format(w))
+        o.write('{}\tx\tx\tx\tx\n'.format(w))
 
 vecs = {w : numpy.average(
                           [
