@@ -130,7 +130,8 @@ colors_dict = {
                'dual' : 'magenta', 
                'sham' : 'grey',
                }
-out_folder = 'plots'
+out_folder = os.path.join('plots', 'figural_fluency')
+os.makedirs(out_folder, exist_ok=True)
 
 ### violin plot
 for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
