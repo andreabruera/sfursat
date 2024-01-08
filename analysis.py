@@ -434,6 +434,11 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                numpy.average(ys[i]),
                color=colors[i],
                )
+        ax.bar(
+               i,
+               numpy.average(ys[i]),
+               yerr=scipy.stats.sem(ys[i]),
+               )
     '''
     ### scatters
     for i in range(len(xs)):
@@ -444,7 +449,7 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                    alpha=0.3,
                    )
     '''
-
+    ax.set_ylim(bottom=6.)
     ax.set_xticks(range(len(xs)))
     ax.set_xticklabels(xs, fontweight='bold')
     ax.set_ylabel('Across-categories average {}'.format(metric))
