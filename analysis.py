@@ -5,6 +5,7 @@ import mne
 import numpy
 import os
 import pickle
+import random
 import re
 import scipy
 import sklearn
@@ -19,7 +20,36 @@ from tqdm import tqdm
 from utils import curel, seqrel, switches_and_clusters, temporal_analysis
 from utf_utils import transform_german_word
 
+def check_vocab(corr_toks, vocab):
+    assert type(corr_toks) in (set, list)
+    check = list()
+    for full_w in corr_toks:
+        counter = 0
+        if len(full_w.split()) == 1:
+            if full_w not in vocab.keys():
+                check.append(False)
+            else:
+                check.append(True)
+        else:
+            within_w = list()
+            for w in full_w.split():
+                if w not in vocab.keys():
+                    within_w.append(False)
+                else:
+                    within_w.append(True)
+            if False not in within_w:
+                check.append(True)
+            else:
+                check.append(False)
+    if True not in check:
+        missing = True
+    else:
+        missing = False
+    return missing
+
 spacy_model = spacy.load('de_core_news_lg')
+ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
+ft_vocab = {w : w for w in ft.words}
 
 ### read dataset
 lines = list()
@@ -34,6 +64,55 @@ with open(os.path.join('data', 'all_tasks.tsv')) as i:
         for val, h in zip(line, header):
             full_dataset[h].append(val)
 total_rows = l_i
+
+### reading manual correction
+manual_corr_toks = dict()
+with open(os.path.join('data', 'to_be_checked_corrected.tsv')) as i:
+    for l_i, l in enumerate(i):
+        if l_i == 0:
+            continue
+        line = [w.strip() for w in l.strip().split('\t')]
+        line = [re.sub('\s+', r' ', w) for w in line]
+        ### corrected spelling
+        if len(line[1]) > 1:
+            corr_word = transform_german_word(line[1], ft_vocab)
+            corr_toks = set([w for c_w in corr_word for w in c_w.split()])
+            is_missing = check_vocab(corr_toks, ft_vocab)
+            if not is_missing:
+                manual_corr_toks[line[0]] = line[1]
+                continue
+        if len(line[2]) > 1:
+            corr_word = transform_german_word(line[2], ft_vocab)
+            corr_toks = set([w for c_w in corr_word for w in c_w.split()])
+            is_missing = check_vocab(corr_toks, ft_vocab)
+            if not is_missing:
+                manual_corr_toks[line[0]] = line[2]
+                continue
+        if len(line[3]) >1:
+            corr_word = transform_german_word(line[3], ft_vocab)
+            corr_toks = set([w for c_w in corr_word for w in c_w.split()])
+            is_missing = check_vocab(corr_toks, ft_vocab)
+            if not is_missing:
+                manual_corr_toks[line[0]] = line[3]
+                continue
+        ### other name
+        if len(line[4]) > 1:
+            corr_word = transform_german_word(line[4], ft_vocab)
+            corr_toks = set([w for c_w in corr_word for w in c_w.split()])
+            is_missing = check_vocab(corr_toks, ft_vocab)
+            if not is_missing:
+                manual_corr_toks[line[0]] = line[4]
+                continue
+        ## split compound
+        alternative_spellings = [w for w in line[5:] if w!='x']
+        if len(alternative_spellings) > 0:
+            joint_w = ' '.join(alternative_spellings)
+            #capital_joint_w = ' '.join([w.capitalize() for w in alternative_spellings])
+            corr_word = transform_german_word(joint_w, ft_vocab)
+            corr_toks = set([w for c_w in corr_word for w in c_w.split()])
+            is_missing = check_vocab(corr_toks, ft_vocab)
+            if not is_missing:
+                manual_corr_toks[line[0]] = joint_w
 
 ### metrics vs difficulty
 difficulties = dict()
@@ -67,21 +146,25 @@ fluencies = {int(sub) : {
                      for sub in set(full_dataset['participant'])
                      }
 
+cats = set()
 for row in tqdm(range(total_rows)):
     sub = int(full_dataset['participant'][row])
     task = full_dataset['task'][row]
     cond = full_dataset['cond'][row]
     cat = full_dataset['item'][row]
+    if 'sem' in task:
+        cats.add(cat)
     rt = float(full_dataset['rt'][row])
     word = full_dataset['response'][row].strip()
+    if word in manual_corr_toks.keys():
+        word = manual_corr_toks[word]
     if cat not in rts[sub][task][cond].keys():
         rts[sub][task][cond][cat] = list()
         fluencies[sub][task][cond][cat] = list()
     rts[sub][task][cond][cat].append(rt)
     fluencies[sub][task][cond][cat].append(word)
+print(cats)
 
-ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
-ft_vocab = {w : w for w in ft.words}
 ### load conceptnet
 vecs = dict()
 word_vecs = dict()
@@ -95,10 +178,14 @@ for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
     if 'sem' in task:
         word = full_dataset['response'][row].strip()
+        #print(word)
+        if word in manual_corr_toks.keys():
+            word = manual_corr_toks[word]
+        #print(word)
         word_vecs[word] = numpy.average([ft.get_word_vector(w) for w in word.split()], axis=0)
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = set([w for c_w in corr_word for w in c_w.split()])
-        #print(corr_toks)
+        assert len(corr_toks) > 0
         corr_vecs[word] = numpy.average([ft.get_word_vector(w) for w in corr_toks], axis=0)
         ### lemma
         #lemma_corr_toks = [w.lemma_ for c_w in corr_word for w in spacy_model(c_w)]
@@ -107,26 +194,8 @@ for row in tqdm(range(total_rows)):
         #lemma_vecs[word] = numpy.average([ft.get_word_vector(w) for w in lemma.split()], axis=0)
         #print(1-scipy.spatial.distance.cosine(word_vecs[word], lemma_vecs[word]))
         ### words to be checked
-        check = list()
-        for full_w in corr_toks:
-            counter = 0
-            if len(full_w.split()) == 1:
-                if full_w not in ft_vocab.keys():
-                    check.append(False)
-                else:
-                    check.append(True)
-            else:
-                within_w = list()
-                for w in full_w.split():
-                    if w not in ft_vocab.keys():
-                        within_w.append(False)
-                    else:
-                        within_w.append(True)
-                if False not in within_w:
-                    check.append(True)
-                else:
-                    check.append(False)
-        if True not in check:
+        is_missing = check_vocab(corr_toks, ft_vocab)
+        if is_missing:
             to_be_checked.append(word)
             
 with open('to_be_checked.tsv', 'w') as o:
@@ -348,6 +417,236 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
         pyplot.clf()
         pyplot.close()
 
+### bar + individual points
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Across-categories averages for {}'.format(metric)
+    #xs = list(results.keys())
+    xs = ['IFG', 'preSMA', 'dual', 'sham']
+    ys = [[val for v in results[k].values() for val in v] for k in xs]
+    ### bar
+    for i in range(len(xs)):
+        ax.bar(
+               i,
+               numpy.average(ys[i]),
+               color=colors[i],
+               )
+    ### scatters
+    for i in range(len(xs)):
+        ax.scatter(
+                   [i+(random.randrange(0, 800)/1000) for y in ys[i]],
+                   ys[i],
+                   color=colors[i],
+                   alpha=0.3,
+                   )
+
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold')
+    ax.set_ylabel('Across-categories average {}'.format(metric))
+    ax.set_title(title)
+    ### p-values
+    p_vals = list()
+    avgs = list()
+    medians = list()
+    for k_one, v_one in results.items():
+        one = [val for v in v_one.values() for val in v]
+        for k_two, v_two in results.items():
+            two = [val for v in v_two.values() for val in v]
+            if k_one == k_two:
+                continue
+            key = [k_one, k_two]
+            if 'sham' in key:
+                alternative = 'greater' if k_one=='sham' else 'less'
+                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one, 
+                                          two, 
+                                          #permutations=4096, 
+                                          alternative=alternative,
+                                          ).pvalue
+                    p_vals.append([[k_one, k_two], round(p, 4)])
+                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                    medians.append([numpy.median(one), numpy.median(two)])
+    ### fdr correction
+    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+        for a, b, c in zip(p_vals, correct_ps, avgs):
+            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
+    pyplot.clf()
+    pyplot.close()
+    ### per-category plots
+    for cat in results['sham'].keys():
+        cat_folder = os.path.join(out_folder, cat)
+        os.makedirs(cat_folder, exist_ok=True)
+        ### plotting overall averages
+        fig, ax = pyplot.subplots(constrained_layout=True)
+        title = '{} scores for {}'.format(metric, cat)
+        #xs = list(results.keys())
+        xs = ['IFG', 'preSMA', 'dual', 'sham']
+        ys = [results[k][cat] for k in xs]
+        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+        ax.set_xticks(range(len(xs)))
+        ax.set_xticklabels(xs, fontweight='bold')
+        for pc, color in zip(parts['bodies'], colors):
+            pc.set_facecolor(color)
+            pc.set_edgecolor('black')
+            pc.set_alpha(1)
+            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
+        ax.set_ylabel('{}'.format(metric))
+        ax.set_title(title)
+        ### p-values
+        p_vals = list()
+        avgs = list()
+        medians = list()
+        for k_one, v_one in results.items():
+            one = v_one[cat]
+            for k_two, v_two in results.items():
+                two = v_two[cat]
+                if k_one == k_two:
+                    continue
+                key = [k_one, k_two]
+                if 'sham' in key:
+                    alternative = 'greater' if k_one=='sham' else 'less'
+                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                        p = scipy.stats.ttest_ind(
+                                              one, 
+                                              two, 
+                                              #permutations=4096, 
+                                              alternative=alternative,
+                                              ).pvalue
+                        p_vals.append([[k_one, k_two], round(p, 4)])
+                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                        medians.append([numpy.median(one), numpy.median(two)])
+        ### fdr correction
+        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
+            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+            for a, b, c in zip(p_vals, correct_ps, avgs):
+                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
+        pyplot.clf()
+        pyplot.close()
+'''
+### violin plot
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Across-categories averages for {}'.format(metric)
+    #xs = list(results.keys())
+    xs = ['IFG', 'preSMA', 'dual', 'sham']
+    ys = [[val for v in results[k].values() for val in v] for k in xs]
+    parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold')
+    for pc, color in zip(parts['bodies'], colors):
+        pc.set_facecolor(color)
+        pc.set_edgecolor('black')
+        pc.set_alpha(1)
+        #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+        #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='_')
+    ax.set_ylabel('Across-categories average {}'.format(metric))
+    ax.set_title(title)
+    ### p-values
+    p_vals = list()
+    avgs = list()
+    medians = list()
+    for k_one, v_one in results.items():
+        one = [val for v in v_one.values() for val in v]
+        for k_two, v_two in results.items():
+            two = [val for v in v_two.values() for val in v]
+            if k_one == k_two:
+                continue
+            key = [k_one, k_two]
+            if 'sham' in key:
+                alternative = 'greater' if k_one=='sham' else 'less'
+                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one, 
+                                          two, 
+                                          #permutations=4096, 
+                                          alternative=alternative,
+                                          ).pvalue
+                    p_vals.append([[k_one, k_two], round(p, 4)])
+                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                    medians.append([numpy.median(one), numpy.median(two)])
+    ### fdr correction
+    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+        for a, b, c in zip(p_vals, correct_ps, avgs):
+            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
+    pyplot.clf()
+    pyplot.close()
+    ### per-category plots
+    for cat in results['sham'].keys():
+        cat_folder = os.path.join(out_folder, cat)
+        os.makedirs(cat_folder, exist_ok=True)
+        ### plotting overall averages
+        fig, ax = pyplot.subplots(constrained_layout=True)
+        title = '{} scores for {}'.format(metric, cat)
+        #xs = list(results.keys())
+        xs = ['IFG', 'preSMA', 'dual', 'sham']
+        ys = [results[k][cat] for k in xs]
+        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+        ax.set_xticks(range(len(xs)))
+        ax.set_xticklabels(xs, fontweight='bold')
+        for pc, color in zip(parts['bodies'], colors):
+            pc.set_facecolor(color)
+            pc.set_edgecolor('black')
+            pc.set_alpha(1)
+            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
+        ax.set_ylabel('{}'.format(metric))
+        ax.set_title(title)
+        ### p-values
+        p_vals = list()
+        avgs = list()
+        medians = list()
+        for k_one, v_one in results.items():
+            one = v_one[cat]
+            for k_two, v_two in results.items():
+                two = v_two[cat]
+                if k_one == k_two:
+                    continue
+                key = [k_one, k_two]
+                if 'sham' in key:
+                    alternative = 'greater' if k_one=='sham' else 'less'
+                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                        p = scipy.stats.ttest_ind(
+                                              one, 
+                                              two, 
+                                              #permutations=4096, 
+                                              alternative=alternative,
+                                              ).pvalue
+                        p_vals.append([[k_one, k_two], round(p, 4)])
+                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                        medians.append([numpy.median(one), numpy.median(two)])
+        ### fdr correction
+        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
+            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+            for a, b, c in zip(p_vals, correct_ps, avgs):
+                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
+        pyplot.clf()
+        pyplot.close()
+
 ### temporal analysis
 temporal_folder = os.path.join(out_folder, 'temporal')
 os.makedirs(temporal_folder, exist_ok=True)
@@ -396,7 +695,7 @@ with open(os.path.join(temporal_folder, 'temporal_p-vals_comparisons.tsv'), 'w')
 pyplot.savefig(os.path.join(temporal_folder, 'temporal_average.jpg'))
 pyplot.clf()
 pyplot.close()
-
+'''
 
 xs = [k[0] for k in sorted(difficulties.items(), key=lambda item : item[1], reverse=True)]
 
