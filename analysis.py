@@ -434,14 +434,16 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                numpy.average(ys[i]),
                color=colors[i],
                )
+    '''
     ### scatters
     for i in range(len(xs)):
         ax.scatter(
-                   [i+(random.randrange(0, 800)/1000) for y in ys[i]],
+                   [i+(random.randrange(-400, 400)/1000) for y in ys[i]],
                    ys[i],
                    color=colors[i],
                    alpha=0.3,
                    )
+    '''
 
     ax.set_xticks(range(len(xs)))
     ax.set_xticklabels(xs, fontweight='bold')
