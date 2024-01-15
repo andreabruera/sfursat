@@ -1,4 +1,3 @@
-import charsplit
 import fasttext
 import matplotlib
 import mne
@@ -48,6 +47,7 @@ def check_vocab(corr_toks, vocab):
     return missing
 
 spacy_model = spacy.load('de_core_news_lg')
+#ft = fasttext.load_model(os.path.join('data', 'cc.de.300.bin'))
 ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
 ft_vocab = {w : w for w in ft.words}
 
@@ -127,22 +127,22 @@ rts = {int(sub) : {
                      task : {
                          cond : {
                                 #cat : list() for cat in set(full_dataset['item'])
-                                } 
+                                }
                          for cond in set(full_dataset['cond'])
-                         } 
+                         }
                      for task in set(full_dataset['task'])
-                     } 
+                     }
                      for sub in set(full_dataset['participant'])
                      }
 fluencies = {int(sub) : {
                      task : {
                          cond : {
                                 #cat : list() for cat in set(full_dataset['item'])
-                                } 
+                                }
                          for cond in set(full_dataset['cond'])
-                         } 
+                         }
                      for task in set(full_dataset['task'])
-                     } 
+                     }
                      for sub in set(full_dataset['participant'])
                      }
 
@@ -165,15 +165,12 @@ for row in tqdm(range(total_rows)):
     fluencies[sub][task][cond][cat].append(word)
 print(cats)
 
-### load conceptnet
 vecs = dict()
 word_vecs = dict()
 lemma_vecs = dict()
 corr_vecs = dict()
 to_be_checked = list()
 
-with open(os.path.join('pickles', 'conceptnet_de.pkl'), 'rb') as i:
-    conceptnet = pickle.load(i)
 for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
     if 'sem' in task:
@@ -197,7 +194,7 @@ for row in tqdm(range(total_rows)):
         is_missing = check_vocab(corr_toks, ft_vocab)
         if is_missing:
             to_be_checked.append(word)
-            
+
 with open('to_be_checked.tsv', 'w') as o:
     o.write('original_transcription\tcorrected_spelling\tother_variants_(e.g._split_compounds)\n')
     for w in set(to_be_checked):
@@ -205,40 +202,10 @@ with open('to_be_checked.tsv', 'w') as o:
 
 vecs = {w : numpy.average(
                           [
-                           #word_vecs[w], 
-                           #lemma_vecs[w], 
+                           #word_vecs[w],
+                           #lemma_vecs[w],
                            corr_vecs[w],
                            ], axis=0) for w in word_vecs.keys()}
-
-'''
-### extrapolating conceptnet
-missing_words = list()
-conceptnet_vecs = dict()
-for word in vecs.keys():
-    corr_word = transform_german_word(word, ft_vocab)
-    vec = list()
-    for version in corr_word:
-        new_version = re.sub('\W', '_', version)
-        try:
-            vec.append(conceptnet[new_version])
-        except KeyError:
-            continue
-    if len(vec) > 0:
-        vec = numpy.average(vec, axis=0)
-        conceptnet_vecs[word] = vec
-    else:
-        missing_words.append(word)
-words = list(conceptnet_vecs.keys())
-ridge = RidgeCV(alphas=(0.01,0.1,1.,10.,100.,1000.))
-ridge.fit(
-          [vecs[w] for w in words],
-          [conceptnet_vecs[w] for w in words]
-          )
-extended_conceptnet = {k : v for k, v in zip(missing_words, ridge.predict([vecs[w] for w in missing_words]))}
-del vecs
-extended_conceptnet.update(conceptnet_vecs)
-vecs = extended_conceptnet.copy()
-'''
 
 curels = {cond : dict() for cond in set(full_dataset['cond'])}
 seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
@@ -297,251 +264,16 @@ for p in font_files:
     font_manager.fontManager.addfont(p)
 matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
 colors = ['teal', 'goldenrod', 'magenta', 'grey']
+scatter_colors = ['darkturquoise', 'wheat', 'violet', 'silver']
 colors_dict = {
-               'IFG' : 'teal', 
-               'preSMA' : 'goldenrod', 
-               'dual' : 'magenta', 
+               'IFG' : 'teal',
+               'preSMA' : 'goldenrod',
+               'dual' : 'magenta',
                'sham' : 'grey',
                }
 out_folder = os.path.join('plots', 'semantic_fluency')
 os.makedirs(out_folder, exist_ok=True)
 
-### violin plot
-for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
-    overall_folder = os.path.join(out_folder, 'overall')
-    os.makedirs(overall_folder, exist_ok=True)
-    ### plotting overall averages
-    fig, ax = pyplot.subplots(constrained_layout=True)
-    title = 'Across-categories averages for {}'.format(metric)
-    #xs = list(results.keys())
-    xs = ['IFG', 'preSMA', 'dual', 'sham']
-    ys = [[val for v in results[k].values() for val in v] for k in xs]
-    parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
-    ax.set_xticks(range(len(xs)))
-    ax.set_xticklabels(xs, fontweight='bold')
-    for pc, color in zip(parts['bodies'], colors):
-        pc.set_facecolor(color)
-        pc.set_edgecolor('black')
-        pc.set_alpha(1)
-        #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
-        #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
-    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='_')
-    ax.set_ylabel('Across-categories average {}'.format(metric))
-    ax.set_title(title)
-    ### p-values
-    p_vals = list()
-    avgs = list()
-    medians = list()
-    for k_one, v_one in results.items():
-        one = [val for v in v_one.values() for val in v]
-        for k_two, v_two in results.items():
-            two = [val for v in v_two.values() for val in v]
-            if k_one == k_two:
-                continue
-            key = [k_one, k_two]
-            if 'sham' in key:
-                alternative = 'greater' if k_one=='sham' else 'less'
-                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
-                    p = scipy.stats.ttest_ind(
-                                          one, 
-                                          two, 
-                                          #permutations=4096, 
-                                          alternative=alternative,
-                                          ).pvalue
-                    p_vals.append([[k_one, k_two], round(p, 4)])
-                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
-                    medians.append([numpy.median(one), numpy.median(two)])
-    ### fdr correction
-    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
-        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
-        for a, b, c in zip(p_vals, correct_ps, avgs):
-            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
-
-    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
-    pyplot.clf()
-    pyplot.close()
-    ### per-category plots
-    for cat in results['sham'].keys():
-        cat_folder = os.path.join(out_folder, cat)
-        os.makedirs(cat_folder, exist_ok=True)
-        ### plotting overall averages
-        fig, ax = pyplot.subplots(constrained_layout=True)
-        title = '{} scores for {}'.format(metric, cat)
-        #xs = list(results.keys())
-        xs = ['IFG', 'preSMA', 'dual', 'sham']
-        ys = [results[k][cat] for k in xs]
-        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
-        ax.set_xticks(range(len(xs)))
-        ax.set_xticklabels(xs, fontweight='bold')
-        for pc, color in zip(parts['bodies'], colors):
-            pc.set_facecolor(color)
-            pc.set_edgecolor('black')
-            pc.set_alpha(1)
-            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
-            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
-        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
-        ax.set_ylabel('{}'.format(metric))
-        ax.set_title(title)
-        ### p-values
-        p_vals = list()
-        avgs = list()
-        medians = list()
-        for k_one, v_one in results.items():
-            one = v_one[cat]
-            for k_two, v_two in results.items():
-                two = v_two[cat]
-                if k_one == k_two:
-                    continue
-                key = [k_one, k_two]
-                if 'sham' in key:
-                    alternative = 'greater' if k_one=='sham' else 'less'
-                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
-                        p = scipy.stats.ttest_ind(
-                                              one, 
-                                              two, 
-                                              #permutations=4096, 
-                                              alternative=alternative,
-                                              ).pvalue
-                        p_vals.append([[k_one, k_two], round(p, 4)])
-                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
-                        medians.append([numpy.median(one), numpy.median(two)])
-        ### fdr correction
-        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
-            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
-            for a, b, c in zip(p_vals, correct_ps, avgs):
-                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
-
-        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
-        pyplot.clf()
-        pyplot.close()
-
-### bar + individual points
-for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
-    overall_folder = os.path.join(out_folder, 'overall')
-    os.makedirs(overall_folder, exist_ok=True)
-    ### plotting overall averages
-    fig, ax = pyplot.subplots(constrained_layout=True)
-    title = 'Across-categories averages for {}'.format(metric)
-    #xs = list(results.keys())
-    xs = ['IFG', 'preSMA', 'dual', 'sham']
-    ys = [[val for v in results[k].values() for val in v] for k in xs]
-    ### bar
-    for i in range(len(xs)):
-        ax.bar(
-               i,
-               numpy.average(ys[i]),
-               color=colors[i],
-               )
-        ax.bar(
-               i,
-               numpy.average(ys[i]),
-               yerr=scipy.stats.sem(ys[i]),
-               )
-    '''
-    ### scatters
-    for i in range(len(xs)):
-        ax.scatter(
-                   [i+(random.randrange(-400, 400)/1000) for y in ys[i]],
-                   ys[i],
-                   color=colors[i],
-                   alpha=0.3,
-                   )
-    '''
-    ax.set_ylim(bottom=6.)
-    ax.set_xticks(range(len(xs)))
-    ax.set_xticklabels(xs, fontweight='bold')
-    ax.set_ylabel('Across-categories average {}'.format(metric))
-    ax.set_title(title)
-    ### p-values
-    p_vals = list()
-    avgs = list()
-    medians = list()
-    for k_one, v_one in results.items():
-        one = [val for v in v_one.values() for val in v]
-        for k_two, v_two in results.items():
-            two = [val for v in v_two.values() for val in v]
-            if k_one == k_two:
-                continue
-            key = [k_one, k_two]
-            if 'sham' in key:
-                alternative = 'greater' if k_one=='sham' else 'less'
-                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
-                    p = scipy.stats.ttest_ind(
-                                          one, 
-                                          two, 
-                                          #permutations=4096, 
-                                          alternative=alternative,
-                                          ).pvalue
-                    p_vals.append([[k_one, k_two], round(p, 4)])
-                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
-                    medians.append([numpy.median(one), numpy.median(two)])
-    ### fdr correction
-    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
-        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
-        for a, b, c in zip(p_vals, correct_ps, avgs):
-            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
-
-    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
-    pyplot.clf()
-    pyplot.close()
-    ### per-category plots
-    for cat in results['sham'].keys():
-        cat_folder = os.path.join(out_folder, cat)
-        os.makedirs(cat_folder, exist_ok=True)
-        ### plotting overall averages
-        fig, ax = pyplot.subplots(constrained_layout=True)
-        title = '{} scores for {}'.format(metric, cat)
-        #xs = list(results.keys())
-        xs = ['IFG', 'preSMA', 'dual', 'sham']
-        ys = [results[k][cat] for k in xs]
-        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
-        ax.set_xticks(range(len(xs)))
-        ax.set_xticklabels(xs, fontweight='bold')
-        for pc, color in zip(parts['bodies'], colors):
-            pc.set_facecolor(color)
-            pc.set_edgecolor('black')
-            pc.set_alpha(1)
-            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
-            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
-        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
-        ax.set_ylabel('{}'.format(metric))
-        ax.set_title(title)
-        ### p-values
-        p_vals = list()
-        avgs = list()
-        medians = list()
-        for k_one, v_one in results.items():
-            one = v_one[cat]
-            for k_two, v_two in results.items():
-                two = v_two[cat]
-                if k_one == k_two:
-                    continue
-                key = [k_one, k_two]
-                if 'sham' in key:
-                    alternative = 'greater' if k_one=='sham' else 'less'
-                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
-                        p = scipy.stats.ttest_ind(
-                                              one, 
-                                              two, 
-                                              #permutations=4096, 
-                                              alternative=alternative,
-                                              ).pvalue
-                        p_vals.append([[k_one, k_two], round(p, 4)])
-                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
-                        medians.append([numpy.median(one), numpy.median(two)])
-        ### fdr correction
-        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
-            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
-            for a, b, c in zip(p_vals, correct_ps, avgs):
-                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
-
-        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
-        pyplot.clf()
-        pyplot.close()
 '''
 ### violin plot
 for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
@@ -580,9 +312,9 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                 alternative = 'greater' if k_one=='sham' else 'less'
                 if sorted(key) not in [sorted(p[0]) for p in p_vals]:
                     p = scipy.stats.ttest_ind(
-                                          one, 
-                                          two, 
-                                          #permutations=4096, 
+                                          one,
+                                          two,
+                                          #permutations=4096,
                                           alternative=alternative,
                                           ).pvalue
                     p_vals.append([[k_one, k_two], round(p, 4)])
@@ -635,9 +367,199 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', swi
                     alternative = 'greater' if k_one=='sham' else 'less'
                     if sorted(key) not in [sorted(p[0]) for p in p_vals]:
                         p = scipy.stats.ttest_ind(
-                                              one, 
-                                              two, 
-                                              #permutations=4096, 
+                                              one,
+                                              two,
+                                              #permutations=4096,
+                                              alternative=alternative,
+                                              ).pvalue
+                        p_vals.append([[k_one, k_two], round(p, 4)])
+                        avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                        medians.append([numpy.median(one), numpy.median(two)])
+        ### fdr correction
+        correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+        with open(os.path.join(cat_folder, '{}_{}_p-vals_comparisons.tsv'.format(cat, metric)), 'w') as o:
+            o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+            for a, b, c in zip(p_vals, correct_ps, avgs):
+                o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+        pyplot.savefig(os.path.join(cat_folder, '{}_{}.jpg'.format(cat, metric)))
+        pyplot.clf()
+        pyplot.close()
+'''
+
+### bar + individual points
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', switches)]:
+    plot_results = {area : {k : numpy.average(v) for k, v in a_results.items()} for area, a_results in results.items()}
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Average {} across semantic categories'.format(metric)
+    #xs = list(results.keys())
+    xs = ['IFG', 'preSMA', 'dual', 'sham']
+    ys = [[val for _, val in plot_results[k].items()] for k in xs]
+    ### bar
+    for i in range(len(xs)):
+        ax.bar(
+               i,
+               numpy.average(ys[i]),
+               color=colors[i],
+               )
+        ax.errorbar(
+               i,
+               numpy.average(ys[i]),
+               color='black',
+               capsize=5.,
+               yerr=scipy.stats.sem(ys[i]),
+               )
+    ### scatters
+    for i in range(len(xs)):
+        ax.scatter(
+                   [i+(random.randrange(-300, 300)/1000) for y in ys[i]],
+                   ys[i],
+                   color=scatter_colors[i],
+                   edgecolors='white',
+                   alpha=0.7,
+                   zorder=3.
+                   )
+    #ax.set_ylim(bottom=6.)
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold')
+    ax.set_ylabel(
+                  'Average number of {}'.format(metric.lower()),
+                  )
+    ax.set_title(title)
+    ### p-values
+    p_vals = list()
+    avgs = list()
+    medians = list()
+    for k_one, v_one in results.items():
+        one = [val for v in v_one.values() for val in v]
+        for k_two, v_two in results.items():
+            two = [val for v in v_two.values() for val in v]
+            if k_one == k_two:
+                continue
+            key = [k_one, k_two]
+            if 'sham' in key:
+                alternative = 'greater' if k_one=='sham' else 'less'
+                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one,
+                                          two,
+                                          #permutations=4096,
+                                          alternative=alternative,
+                                          ).pvalue
+                    p_vals.append([[k_one, k_two], round(p, 4)])
+                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                    medians.append([numpy.median(one), numpy.median(two)])
+    ### fdr correction
+    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+        for a, b, c in zip(p_vals, correct_ps, avgs):
+            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+    pyplot.savefig(
+                   os.path.join(overall_folder, '{}_average.jpg'.format(metric)),
+                   dpi=300,)
+    pyplot.clf()
+    pyplot.close()
+'''
+### violin plot
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+    overall_folder = os.path.join(out_folder, 'overall')
+    os.makedirs(overall_folder, exist_ok=True)
+    ### plotting overall averages
+    fig, ax = pyplot.subplots(constrained_layout=True)
+    title = 'Across-categories averages for {}'.format(metric)
+    #xs = list(results.keys())
+    xs = ['IFG', 'preSMA', 'dual', 'sham']
+    ys = [[val for v in results[k].values() for val in v] for k in xs]
+    parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs, fontweight='bold')
+    for pc, color in zip(parts['bodies'], colors):
+        pc.set_facecolor(color)
+        pc.set_edgecolor('black')
+        pc.set_alpha(1)
+        #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+        #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+    ax.scatter(range(len(xs)), [numpy.average([val for v in results[k].values() for val in v]) for k in xs],zorder=3, color='white', marker='_')
+    ax.set_ylabel('Across-categories average {}'.format(metric))
+    ax.set_title(title)
+    ### p-values
+    p_vals = list()
+    avgs = list()
+    medians = list()
+    for k_one, v_one in results.items():
+        one = [val for v in v_one.values() for val in v]
+        for k_two, v_two in results.items():
+            two = [val for v in v_two.values() for val in v]
+            if k_one == k_two:
+                continue
+            key = [k_one, k_two]
+            if 'sham' in key:
+                alternative = 'greater' if k_one=='sham' else 'less'
+                if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                    p = scipy.stats.ttest_ind(
+                                          one,
+                                          two,
+                                          #permutations=4096,
+                                          alternative=alternative,
+                                          ).pvalue
+                    p_vals.append([[k_one, k_two], round(p, 4)])
+                    avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
+                    medians.append([numpy.median(one), numpy.median(two)])
+    ### fdr correction
+    correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
+    with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
+        for a, b, c in zip(p_vals, correct_ps, avgs):
+            o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
+
+    pyplot.savefig(os.path.join(overall_folder, '{}_average.jpg'.format(metric)))
+    pyplot.clf()
+    pyplot.close()
+    ### per-category plots
+    for cat in results['sham'].keys():
+        cat_folder = os.path.join(out_folder, cat)
+        os.makedirs(cat_folder, exist_ok=True)
+        ### plotting overall averages
+        fig, ax = pyplot.subplots(constrained_layout=True)
+        title = '{} scores for {}'.format(metric, cat)
+        #xs = list(results.keys())
+        xs = ['IFG', 'preSMA', 'dual', 'sham']
+        ys = [results[k][cat] for k in xs]
+        parts = ax.violinplot(ys, positions=range(len(ys)), showmeans=True, showextrema=False,)
+        ax.set_xticks(range(len(xs)))
+        ax.set_xticklabels(xs, fontweight='bold')
+        for pc, color in zip(parts['bodies'], colors):
+            pc.set_facecolor(color)
+            pc.set_edgecolor('black')
+            pc.set_alpha(1)
+            #m = numpy.mean(pc.get_paths()[0].vertices[:, 0])
+            #pc.get_paths()[0].vertices[:, 0] = numpy.clip(pc.get_paths()[0].vertices[:, 0], -numpy.inf, m)
+        ax.scatter(range(len(xs)), [numpy.average(results[k][cat]) for k in xs],zorder=3, color='white', marker='_')
+        ax.set_ylabel('{}'.format(metric))
+        ax.set_title(title)
+        ### p-values
+        p_vals = list()
+        avgs = list()
+        medians = list()
+        for k_one, v_one in results.items():
+            one = v_one[cat]
+            for k_two, v_two in results.items():
+                two = v_two[cat]
+                if k_one == k_two:
+                    continue
+                key = [k_one, k_two]
+                if 'sham' in key:
+                    alternative = 'greater' if k_one=='sham' else 'less'
+                    if sorted(key) not in [sorted(p[0]) for p in p_vals]:
+                        p = scipy.stats.ttest_ind(
+                                              one,
+                                              two,
+                                              #permutations=4096,
                                               alternative=alternative,
                                               ).pvalue
                         p_vals.append([[k_one, k_two], round(p, 4)])
@@ -686,9 +608,9 @@ for k_one, v_one in temporal_correlations.items():
         key = tuple(sorted([k_one, k_two]))
         if key not in [p[0] for p in p_vals]:
             p = scipy.stats.ttest_ind(
-                                  one, 
-                                  two, 
-                                  permutations=4096, 
+                                  one,
+                                  two,
+                                  permutations=4096,
                                   #alternative=direction,
                                   ).pvalue
             p_vals.append([key, p])
@@ -706,22 +628,89 @@ pyplot.close()
 
 xs = [k[0] for k in sorted(difficulties.items(), key=lambda item : item[1], reverse=True)]
 
-for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('Switches', switches)]:
+for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', switches)]:
     overall_folder = os.path.join(out_folder, 'overall')
     os.makedirs(overall_folder, exist_ok=True)
     ### plotting overall averages
     fig, ax = pyplot.subplots(constrained_layout=True, figsize=(16, 9))
-    title = 'Averages (y) vs increasing category difficulty (x) for {}'.format(metric)
+    title = 'Average {} per category'.format(metric)
     dual_ys = [numpy.average(results['dual'][k]) for k in xs]
     sham_ys = [numpy.average(results['sham'][k]) for k in xs]
+    ifg_ys = [numpy.average(results['IFG'][k]) for k in xs]
+    presma_ys = [numpy.average(results['preSMA'][k]) for k in xs]
     ax.set_xticks(range(len(xs)))
-    ax.set_xticklabels(xs, fontweight='bold', rotation=45)
-    ax.set_ylabel('Average {}'.format(metric))
-    ax.set_xlabel('Categories (easier -> harder)')
-    ax.set_title(title)
+    ax.set_xticklabels(
+                       xs, 
+                       fontweight='bold', 
+                       rotation=45,
+                       fontsize=15,
+                       ha='right',
+                       )
+    ax.set_ylabel(
+                  'Average {}'.format(metric),
+                  fontsize=20,
+                  )
+    ax.set_xlabel(
+                  'Categories (easier -> harder)',
+                  fontsize=20,
+                  )
+    ax.set_title(
+                 title,
+                 fontsize=23.,
+                 )
+    ### dual
     ax.plot(range(len(xs)), dual_ys, color=colors_dict['dual'], label='dual')
-    ax.plot(range(len(xs)), sham_ys, color=colors_dict['sham'], label='sham')
-    ax.legend()
+    ax.scatter(
+               range(len(xs)), 
+               dual_ys, 
+               color=colors_dict['dual'], 
+               marker='s', 
+               edgecolors='white', 
+               #linewidths=15,
+               s=50,
+               zorder=3.
+               )
+    '''
+    ### IFG
+    ax.plot(range(len(xs)), ifg_ys, color=colors_dict['IFG'], label='IFG', alpha=0.6,)
+    ax.scatter(
+               range(len(xs)), 
+               ifg_ys, 
+               color=colors_dict['IFG'], 
+               marker='8', 
+               edgecolors='white', 
+               #linewidths=15,
+               alpha=0.6,
+               s=50,
+               zorder=3.
+               )
+    ### preSMA
+    ax.plot(range(len(xs)), presma_ys, color=colors_dict['preSMA'], label='preSMA', alpha=0.6,)
+    ax.scatter(
+               range(len(xs)), 
+               presma_ys, 
+               color=colors_dict['preSMA'], 
+               marker='v', 
+               edgecolors='white', 
+               #linewidths=15,
+               alpha=0.6,
+               s=50,
+               zorder=3.
+               )
+    '''
+    ### sham
+    ax.plot(range(len(xs)), sham_ys, color=colors_dict['sham'], label='sham', linestyle='--')
+    ax.scatter(
+               range(len(xs)), 
+               sham_ys, 
+               color=colors_dict['sham'], 
+               marker='D', 
+               edgecolors='white', 
+               #linewidths=15,
+               s=50,
+               zorder=3.,
+               )
+    ax.legend(fontsize=23)
     pyplot.savefig(os.path.join(overall_folder, '{}_difficulties.jpg'.format(metric)))
     pyplot.clf()
     pyplot.close()
