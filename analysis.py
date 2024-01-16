@@ -263,12 +263,12 @@ font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
 for p in font_files:
     font_manager.fontManager.addfont(p)
 matplotlib.rcParams['font.family'] = 'Helvetica LT Std'
-colors = ['teal', 'goldenrod', 'magenta', 'grey']
-scatter_colors = ['darkturquoise', 'wheat', 'violet', 'silver']
+colors = ['#0072B2', 'goldenrod', '#D55E00', 'grey']
+scatter_colors = ['darkturquoise', 'wheat', 'darkorange', 'silver']
 colors_dict = {
-               'IFG' : 'teal',
+               'IFG' : '#0072B2',
                'preSMA' : 'goldenrod',
-               'dual' : 'magenta',
+               'dual' : '#D55E00',
                'sham' : 'grey',
                }
 out_folder = os.path.join('plots', 'semantic_fluency')
@@ -397,32 +397,79 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', swi
     title = 'Average {} across semantic categories'.format(metric)
     #xs = list(results.keys())
     xs = ['IFG', 'preSMA', 'dual', 'sham']
+    ### average category scatters
     ys = [[val for _, val in plot_results[k].items()] for k in xs]
-    ### bar
-    for i in range(len(xs)):
-        ax.bar(
-               i,
-               numpy.average(ys[i]),
-               color=colors[i],
-               )
-        ax.errorbar(
-               i,
-               numpy.average(ys[i]),
-               color='black',
-               capsize=5.,
-               yerr=scipy.stats.sem(ys[i]),
-               )
-    ### scatters
+    line_y = max(ys[xs.index('sham')])-scipy.stats.sem(ys[xs.index('sham')])
+    ys = [{_ : val for _, val in plot_results[k].items()} for k in xs]
+    corrections = {cat : random.randrange(-300, 300)/1000 for cat in results['sham'].keys()}
     for i in range(len(xs)):
         ax.scatter(
-                   [i+(random.randrange(-300, 300)/1000) for y in ys[i]],
+                   [i+corrections[cat] for cat, y in ys[i].items()],
+                   [y for cat, y in ys[i].items()],
+                   color=scatter_colors[i],
+                   edgecolors='white',
+                   alpha=0.7,
+                   zorder=2.5,
+                   s=30,
+                   )
+    shams = ys[xs.index('sham')]
+    duals = ys[xs.index('dual')]
+    for cat, corr in corrections.items():
+        ax.plot(
+                [2+corrections[cat], 3+corrections[cat]],
+                [duals[cat], shams[cat]],
+                alpha=0.2,
+                color='black',
+                zorder=2.
+                )
+    ys = [[val for _, val in plot_results[k].items()] for k in xs]
+            
+    '''
+    ### all subjects scatters
+    ys = [[val for _, v in results[k].items() for val in v] for k in xs]
+    line_y = max(ys[xs.index('sham')])-scipy.stats.sem(ys[xs.index('sham')])
+    for i in range(len(xs)):
+        ax.scatter(
+                   [numpy.array(i)+corrections for y in ys[i]],
                    ys[i],
                    color=scatter_colors[i],
                    edgecolors='white',
                    alpha=0.7,
                    zorder=3.
                    )
-    #ax.set_ylim(bottom=6.)
+    ### no scatter + clip
+    ys = [[val for _, val in plot_results[k].items()] for k in xs]
+    line_y = numpy.average(ys[xs.index('sham')])+(3*scipy.stats.sem(ys[xs.index('sham')]))
+    ### no scatter no clip
+    ys = [[val for _, val in plot_results[k].items()] for k in xs]
+    line_y = numpy.average(ys[xs.index('sham')])+(3*scipy.stats.sem(ys[xs.index('sham')]))
+    '''
+    ### bar
+    for i in range(len(xs)):
+        ax.bar(
+               i,
+               numpy.average(ys[i]),
+               color=colors[i],
+               zorder=1.5
+               )
+        if i==0:
+            label='SEM'
+        else:
+            label=''
+        ax.errorbar(
+               i,
+               numpy.average(ys[i]),
+               color='black',
+               capsize=5.,
+               yerr=scipy.stats.sem(ys[i]),
+               label=label,
+               zorder=3.
+               )
+    ### clipping?
+    #ax.set_ylim(
+    #            ymin=numpy.average(ys[xs.index('dual')])-(2*numpy.std(ys[xs.index('dual')])),
+    #            ymax=numpy.average(ys[xs.index('dual')])+(2*numpy.std(ys[xs.index('dual')]))
+    #            )
     ax.set_xticks(range(len(xs)))
     ax.set_xticklabels(xs, fontweight='bold')
     ax.set_ylabel(
@@ -452,6 +499,38 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', swi
                     p_vals.append([[k_one, k_two], round(p, 4)])
                     avgs.append([round(numpy.average(one), 3), round(numpy.average(two), 3)])
                     medians.append([numpy.median(one), numpy.median(two)])
+    ### plotting ps if significant
+    for p in p_vals:
+        key_one = p[0][0]
+        key_two = p[0][1]
+        p_val = p[1]
+        if p_val < 0.05:
+            start = xs.index(key_one)
+            end = xs.index(key_two)
+            print([start, end])
+            ax.plot(
+                    [start, start],
+                    [line_y-.5, line_y-1.],
+                    color='black',
+                    )
+            ax.plot(
+                    [end, end],
+                    [line_y-.5, line_y-1.],
+                    color='black',
+                    )
+            ax.plot(
+                    [start, end],
+                    [line_y-.5, line_y-.5],
+                    color='black',
+                    )
+            ax.scatter(
+                    (start+end)*.5,
+                    line_y+.3,
+                    color='black',
+                    marker='*',
+                    label='p<0.05',
+                    )
+    ax.legend()
     ### fdr correction
     correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
     with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
@@ -636,6 +715,16 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', swi
     title = 'Average {} per category'.format(metric)
     dual_ys = [numpy.average(results['dual'][k]) for k in xs]
     sham_ys = [numpy.average(results['sham'][k]) for k in xs]
+    test_dual_ys = [results['dual'][k] for k in xs]
+    test_sham_ys = [results['sham'][k] for k in xs]
+    ps = scipy.stats.ttest_ind(
+                              test_dual_ys,
+                              test_sham_ys,
+                              axis=1,
+                              alternative='less',
+                              ).pvalue
+    print([metric, ps])
+    assert ps.shape == numpy.array(xs).shape
     ifg_ys = [numpy.average(results['IFG'][k]) for k in xs]
     presma_ys = [numpy.average(results['preSMA'][k]) for k in xs]
     ax.set_xticks(range(len(xs)))
@@ -658,6 +747,38 @@ for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', swi
                  title,
                  fontsize=23.,
                  )
+    ### ps
+    ps_five_xs = [i for i, p in enumerate(ps) if p<=0.05]
+    if len(ps_five_xs) > 0:
+        print(ps_five_xs)
+        ax.scatter(
+               ps_five_xs, 
+               [3.5 for i in ps_five_xs], 
+               color='black', 
+               marker='*', 
+               s=60,
+               label='p<0.05'
+               )
+    ps_approach_xs = [i for i, p in enumerate(ps) if p<=0.1 and p>0.05]
+    if len(ps_approach_xs) > 0:
+        ax.scatter(
+               ps_approach_xs, 
+               [3.5 for i in ps_approach_xs], 
+               color='black', 
+               marker='^', 
+               s=60,
+               label='p<0.1'
+               )
+    ps_approach_xs = [i for i, p in enumerate(ps) if p<=0.2 and p>0.1]
+    if len(ps_approach_xs) > 0:
+        ax.scatter(
+               ps_approach_xs, 
+               [3.5 for i in ps_approach_xs], 
+               color='black', 
+               marker='2', 
+               s=60,
+               label='p<0.2'
+               )
     ### dual
     ax.plot(range(len(xs)), dual_ys, color=colors_dict['dual'], label='dual')
     ax.scatter(
