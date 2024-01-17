@@ -35,7 +35,7 @@ def transform_german_word(word, model):
                    [' '.join([tok.capitalize() for tok in word.split()])] + \
                    ### non-capitalized
                    [w for w in versions] + \
-                   [word],
+                   [word]
                    )
     print(versions)
     return versions

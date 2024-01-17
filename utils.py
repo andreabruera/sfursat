@@ -33,7 +33,7 @@ def curel(words, vecs, mode='language'):
     sims = list()
     for w_one, w_two in combs:
         if mode == 'language':
-            sim = 1 -scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
+            sim = 1 - scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
         elif mode == 'fig':
             sim = 8 - levenshtein(w_one, w_two)
         sims.append(sim)
@@ -44,7 +44,7 @@ def seqrel(words, vecs, mode='language'):
     sims = list()
     for w_one, w_two in combs:
         if mode == 'language':
-            sim = 1 -scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
+            sim = 1 - scipy.spatial.distance.cosine(vecs[w_one], vecs[w_two])
         elif mode == 'fig':
             sim = 8 - levenshtein(w_one, w_two)
         sims.append(sim)
@@ -89,3 +89,10 @@ def temporal_analysis(words, vecs, rts, mode='language'):
     assert len(sims) == len(rts[1:])
     corr = scipy.stats.pearsonr(sims, rts[1:])[0]
     return corr
+
+def manual_correction(word, stopwords, manual_corr_toks):
+    #if word in manual_corr_toks.keys():
+    #    word = manual_corr_toks[word]
+    ### removing stopwords
+    word = ' '.join([w for w in word.split() if w.lower() not in stopwords])
+    return word
