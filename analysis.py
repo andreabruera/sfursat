@@ -303,14 +303,13 @@ colors_dict = {
 txt_folder = os.path.join('results', 'semantic_fluency')
 os.makedirs(txt_folder, exist_ok=True)
 ### correlation between switches and RTs
-with open(os.path.join(txt_folder, 'rt-switches_correlations.tsv'), 'w') as o:
+with open(os.path.join(txt_folder, 'RT-switches_correlations.tsv'), 'w') as o:
     o.write('condition\tpearson_correlation\tuncorrected_p-value\n')
     for area, area_switches in switches.items():
         keys = list(area_switches.keys())
         corr_switches = [numpy.average(area_switches[k]) for k in keys]
         corr_rts = [numpy.average(all_rts[area][k]) for k in keys]
         corr_log_rts = [numpy.average(log_all_rts[area][k]) for k in keys]
-
         rt_corr = scipy.stats.pearsonr(corr_switches, corr_rts)
         o.write('RTs\t{}\t{}\t{}\n'.format(area, round(rt_corr.statistic, 4), rt_corr.pvalue))
         log_rt_corr = scipy.stats.pearsonr(corr_switches, corr_log_rts)
