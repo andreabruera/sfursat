@@ -13,7 +13,6 @@ import spacy
 from matplotlib import font_manager, pyplot
 from mne import stats
 from scipy import spatial, stats
-from sklearn.linear_model import RidgeCV
 from tqdm import tqdm
 
 from utils import curel, seqrel, manual_correction, switches_and_clusters, temporal_analysis
@@ -299,15 +298,38 @@ colors_dict = {
                'sham' : 'grey',
                }
 
+
+
+txt_folder = os.path.join('results', 'semantic_fluency')
+os.makedirs(txt_folder, exist_ok=True)
+### correlation between switches and RTs
+with open(os.path.join(txt_folder, 'rt-switches_correlations.tsv'), 'w') as o:
+    o.write('condition\tpearson_correlation\tuncorrected_p-value\n')
+    for area, area_switches in switches.items():
+        keys = list(area_switches.keys())
+        corr_switches = [numpy.average(area_switches[k]) for k in keys]
+        corr_rts = [numpy.average(all_rts[area][k]) for k in keys]
+        corr_log_rts = [numpy.average(log_all_rts[area][k]) for k in keys]
+
+        rt_corr = scipy.stats.pearsonr(corr_switches, corr_rts)
+        o.write('RTs\t{}\t{}\t{}\n'.format(area, round(rt_corr.statistic, 4), rt_corr.pvalue))
+        log_rt_corr = scipy.stats.pearsonr(corr_switches, corr_log_rts)
+        o.write('log(1+RT)\t{}\t{}\t{}\n'.format(area, round(log_rt_corr.statistic, 4), log_rt_corr.pvalue))
+
+
 for marker in ['less_bars', 'more_bars']:
     out_folder = os.path.join('plots', 'semantic_fluency', marker)
     os.makedirs(out_folder, exist_ok=True)
 
     ### bar + individual points
-    for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', switches), ('RT', all_rts), ('log(1+RT)', log_all_rts)]:
+    for metric, results in [
+                            #('CuRel', curels), 
+                            #('SeqRel', seqrels), 
+                            ('switches', switches), 
+                            ('RT', all_rts), 
+                            ('log(1+RT)', log_all_rts),
+                            ]:
         plot_results = {area : {k : numpy.average(v) for k, v in a_results.items()} for area, a_results in results.items()}
-        overall_folder = os.path.join(out_folder, 'overall')
-        os.makedirs(overall_folder, exist_ok=True)
         ### plotting overall averages
         fig, ax = pyplot.subplots(constrained_layout=True)
         title = 'Average {} across semantic categories'.format(metric)
@@ -433,7 +455,7 @@ for marker in ['less_bars', 'more_bars']:
                 pos_v = v*counter*4
                 start = xs.index(key_one)
                 end = xs.index(key_two)
-                print([start, end])
+                #print([start, end])
                 ax.plot(
                         [start, start],
                         [line_y-pos_v-v, line_y-pos_v-(v*2)],
@@ -464,13 +486,13 @@ for marker in ['less_bars', 'more_bars']:
         ax.legend()
         ### fdr correction
         correct_ps = mne.stats.fdr_correction([p[1] for p in p_vals])[1]
-        with open(os.path.join(overall_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
+        with open(os.path.join(txt_folder, '{}_p-vals_comparisons.tsv'.format(metric)), 'w') as o:
             o.write('comparison\tuncorrected_p-value\tFDR-corrected_p-value\taverages\n')
             for a, b, c in zip(p_vals, correct_ps, avgs):
                 o.write('{}\t{}\t{}\t{}\n'.format(a[0], a[1], b, c))
 
         pyplot.savefig(
-                       os.path.join(overall_folder, '{}_average.jpg'.format(metric)),
+                       os.path.join(out_folder, '{}_average.jpg'.format(metric)),
                        dpi=300,)
         pyplot.clf()
         pyplot.close()
@@ -478,9 +500,13 @@ for marker in ['less_bars', 'more_bars']:
     ### scores X category difficulty
     xs = [k[0] for k in sorted(difficulties.items(), key=lambda item : item[1], reverse=True)]
 
-    for metric, results in [('CuRel', curels), ('SeqRel', seqrels), ('switches', switches), ('RT', all_rts), ('log(1+RT)', log_all_rts)]:
-        overall_folder = os.path.join(out_folder, 'overall')
-        os.makedirs(overall_folder, exist_ok=True)
+    for metric, results in [
+                            #('CuRel', curels), 
+                            #('SeqRel', seqrels), 
+                            ('switches', switches), 
+                            ('RT', all_rts), 
+                            ('log(1+RT)', log_all_rts),
+                            ]:
         ### plotting overall averages
         fig, ax = pyplot.subplots(constrained_layout=True, figsize=(16, 9))
         title = 'Average {} per category'.format(metric)
@@ -501,7 +527,7 @@ for marker in ['less_bars', 'more_bars']:
                                   alternative=alt,
                                   ).pvalue
             ps.append(p)
-        print([metric, ps])
+        #print([metric, ps])
         assert numpy.array(ps).shape == numpy.array(xs).shape
         ifg_ys = [numpy.average(results['IFG'][k]) for k in xs]
         presma_ys = [numpy.average(results['preSMA'][k]) for k in xs]
@@ -528,7 +554,7 @@ for marker in ['less_bars', 'more_bars']:
         ### ps
         ps_five_xs = [i for i, p in enumerate(ps) if p<=0.05]
         if len(ps_five_xs) > 0:
-            print(ps_five_xs)
+            #print(ps_five_xs)
             ax.scatter(
                    ps_five_xs, 
                    [min_val for i in ps_five_xs], 
@@ -610,6 +636,6 @@ for marker in ['less_bars', 'more_bars']:
                    zorder=3.,
                    )
         ax.legend(fontsize=23)
-        pyplot.savefig(os.path.join(overall_folder, '{}_difficulties.jpg'.format(metric)))
+        pyplot.savefig(os.path.join(out_folder, '{}_difficulties.jpg'.format(metric)))
         pyplot.clf()
         pyplot.close()
