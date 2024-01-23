@@ -348,23 +348,24 @@ for marker in ['less_bars', 'more_bars']:
                        zorder=2.5,
                        s=30,
                        )
-        ### drawing lines
-        combs = [
-                 ('sham', 'IFG', 0, 1),
-                 ('IFG', 'preSMA', 1, 2),
-                 ('preSMA', 'dual', 2, 3),
-                 ]
-        for cat, corr in corrections.items():
-            for one, two, pos_one, pos_two in combs:
-                ones = ys[xs.index(one)]
-                twos = ys[xs.index(two)]
-                ax.plot(
-                        [pos_one+corrections[cat], pos_two+corrections[cat]],
-                        [ones[cat], twos[cat]],
-                        alpha=0.1,
-                        color='black',
-                        zorder=2.
-                        )
+        if marker == 'more_bars':
+            ### drawing lines
+            combs = [
+                     ('sham', 'IFG', 0, 1),
+                     ('IFG', 'preSMA', 1, 2),
+                     ('preSMA', 'dual', 2, 3),
+                     ]
+            for cat, corr in corrections.items():
+                for one, two, pos_one, pos_two in combs:
+                    ones = ys[xs.index(one)]
+                    twos = ys[xs.index(two)]
+                    ax.plot(
+                            [pos_one+corrections[cat], pos_two+corrections[cat]],
+                            [ones[cat], twos[cat]],
+                            alpha=0.1,
+                            color='black',
+                            zorder=2.
+                            )
         ys = [[val for _, val in plot_results[k].items()] for k in xs]
         '''
         ### all subjects scatters
