@@ -37,5 +37,5 @@ def transform_german_word(word, model):
                    [w for w in versions] + \
                    [word]
                    )
-    print(versions)
+    #print(versions)
     return versions
