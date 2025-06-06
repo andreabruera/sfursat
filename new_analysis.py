@@ -45,8 +45,54 @@ def check_vocab(corr_toks, vocab):
         missing = False
     return missing
 
+case = 'uncased'
+lang = 'de'
+f = 'wac'
+#f = 'opensubs'
+#f = 'cc100'
+min_count = 10
+#min_count = 100
+
+base_folder = os.path.join('..', '..', 'counts',
+                       lang, 
+                       f,
+                       )
+with open(os.path.join(
+                        base_folder,
+                       '{}_{}_{}_word_freqs.pkl'.format(
+                                                         lang, 
+                                                         f,
+                                                         case
+                                                         ),
+                       ), 'rb') as i:
+    freqs = pickle.load(i)
+vocab_file = os.path.join(
+                        base_folder,
+                       '{}_{}_{}_vocab_min_{}.pkl'.format(
+                                                           lang, 
+                                                           f,
+                                                           case,
+                                                           min_count
+                                                           ),
+                       )
+with open(vocab_file, 'rb') as i:
+    vocab = pickle.load(i)
+print('total size of the corpus: {:,} tokens'.format(sum(freqs.values())))
+print('total size of the vocabulary: {:,} words'.format(max(vocab.values())))
+coocs_file = os.path.join(base_folder,
+              #'{}_{}_forward-coocs_{}_min_{}_win_5.pkl'.format(
+              '{}_{}_forward-coocs_{}_min_{}_win_20.pkl'.format(
+                                                                 lang,
+                                                                 f,
+                                                                 case,
+                                                                 min_count
+                                                                 )
+                  )
+with open(coocs_file, 'rb') as i:
+    coocs = pickle.load(i)
+
 #spacy_model = spacy.load('de_core_news_lg')
-ft = fasttext.load_model(os.path.join('data', 'models', 'cc.de.300.bin'))
+ft = fasttext.load_model(os.path.join('/', 'data', 'u_bruera_software', 'word_vectors','de', 'cc.de.300.bin'))
 #ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
 ft_vocab = {w : w for w in ft.words}
 
@@ -182,7 +228,9 @@ for row in tqdm(range(total_rows)):
         rts[sub][task][cond][cat] = list()
         fluencies[sub][task][cond][cat] = list()
         accuracies[sub][task][cond][cat] = list()
-    rts[sub][task][cond][cat].append(rt)
+    #rts[sub][task][cond][cat].append(rt)
+    ### log10 for rts
+    rts[sub][task][cond][cat].append(numpy.log10(1+rt))
     fluencies[sub][task][cond][cat].append(word)
     accuracies[sub][task][cond][cat].append(accuracy)
 print(cats)
@@ -192,6 +240,7 @@ word_vecs = dict()
 lemma_vecs = dict()
 corr_vecs = dict()
 to_be_checked = list()
+w_versions = dict()
 
 for row in tqdm(range(total_rows)):
     task = full_dataset['task'][row]
@@ -202,6 +251,7 @@ for row in tqdm(range(total_rows)):
         ### automatic correction + multiple orthographical versions
         corr_word = transform_german_word(word, ft_vocab)
         corr_toks = set([w for c_w in corr_word for w in c_w.split() if w!=''])
+        w_versions[word] = corr_toks
         #print(corr_toks)
         assert len(corr_toks) > 0
         ### words to be checked
@@ -259,33 +309,145 @@ for _, sub_data in tqdm(fluencies.items()):
             corr = scipy.stats.spearmanr(curr_rts, curr_sims).statistic
             proto_results[cond][cat].append(corr)
 
-seq_results = dict()
-len_results = dict()
+#seq_results = dict()
+#len_results = dict()
+#freq_results = dict()
+#logfreq_results = dict()
+#cooc_results = dict()
+#surp_results = dict()
+results = {
+           'word_length' : dict(),
+           'neg_word_frequency' : dict(),
+           'word_surprisal' : dict(),
+           'fasttext' : dict(),
+           }
 
 for _, sub_data in tqdm(fluencies.items()):
+    #seq_results[_] = dict()
+    #len_results[_] = dict()
+    #freq_results[_] = dict()
+    #logfreq_results[_] = dict()
+    #cooc_results[_] = dict()
+    #surp_results[_] = dict()
+    for k in results.keys():
+        results[k][_]  = dict()
     for cond, cond_data in sub_data['sem_fluency'].items():
-        if cond not in seq_results.keys():
-            seq_results[cond] = dict()
-            len_results[cond] = dict()
+        if cond not in results['word_length'][_].keys():
+            for k_one in results.keys():
+                #for k_two in results[k_one].keys():
+                results[k_one][_][cond] = dict()
         for cat, words in cond_data.items():
-            if cat not in seq_results[cond].keys():
-                seq_results[cond][cat] = list()
-                len_results[cond][cat] = list()
+            if cat not in results['word_length'][_][cond].keys():
+                for k_one in results.keys():
+                    #for k_two in results[k_one].keys():
+                    #for k_three in results[k_one][k_two].keys():
+                    results[k_one][_][cond][cat] = dict()
             curr_rts = rts[_]['sem_fluency'][cond][cat]
             curr_sims = list()
             for w_i, w in enumerate(words):
                 if w_i == 0:
-                    #start_vec = proto_vecs[cat]
                     continue
                 else:
                     start_vec = word_vecs[words[w_i-1]]
+                start_vec = word_vecs[words[0]]
                 sim = scipy.spatial.distance.cosine(start_vec, word_vecs[w])
                 curr_sims.append(sim)
+            ### fasttext
+            ### rts
             corr = scipy.stats.spearmanr(curr_rts[1:], curr_sims).statistic
-            seq_results[cond][cat].append(corr)
+            results['fasttext'][_][cond][cat]['rts'] = corr
+            ### order
+            corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], curr_sims).statistic
+            results['fasttext'][_][cond][cat]['order'] = corr
+            ### length
             lens = [len(w) for w in words[1:]]
+            ### rts
             corr = scipy.stats.spearmanr(curr_rts[1:], lens).statistic
-            len_results[cond][cat].append(corr)
+            results['word_length'][_][cond][cat]['rts'] = corr
+            ### order
+            corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], lens).statistic
+            results['word_length'][_][cond][cat]['order'] = corr
+            ### frequency
+            curr_sims = list()
+            for w_i, original_w in enumerate(words):
+                if w_i == 0:
+                    continue
+                #if len(w.split())>1:
+                #    w = w.split()[-1]
+                w = w_versions[original_w]
+                counter = 0
+                for tok in w:
+                    try:
+                        #curr_sims.append(freqs[w])
+                        #curr_sims.append(freqs[w])
+                        counter += freqs[tok]
+                    except KeyError:
+                        #curr_sims.append(0)
+                        continue
+                curr_sims.append(counter)
+            ### rts
+            corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.array(curr_sims)).statistic
+            results['neg_word_frequency'][_][cond][cat]['rts'] = corr
+            ### order
+            corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.array(curr_sims)).statistic
+            results['neg_word_frequency'][_][cond][cat]['order'] = corr
+            ### log freq
+            #corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.log2(1+numpy.array(curr_sims))).statistic
+            #corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.log2(1+numpy.array(curr_sims))).statistic
+            ### surprisal
+            curr_sims = list()
+            for w_i, w in enumerate(words):
+                if w_i == 0:
+                    continue
+                else:
+                    start_w = words[w_i-1]
+                #if len(w.split())>1:
+                #    w = w.split()[-1]
+                counter = 0
+                for tok_one in w_versions[start_w]:
+                    for tok_two in w_versions[w]:
+                        try:
+                            assert vocab[tok_one] != 0
+                            assert vocab[tok_two] != 0
+                        except (AssertionError, KeyError):
+                            #curr_sims.append(0)
+                            continue
+                        try:
+                            #curr_sims.append(coocs[vocab[start_w]][vocab[w]])
+                            counter += coocs[vocab[tok_one]][vocab[tok_two]]
+                        except KeyError:
+                            #curr_sims.append(0)
+                            continue
+                curr_sims.append(counter)
+            ### rts
+            corr = scipy.stats.pearsonr(curr_rts[1:], -numpy.log2(1+numpy.array(curr_sims))).statistic
+            results['word_surprisal'][_][cond][cat]['rts'] = corr
+            ### order
+            corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.log2(1+numpy.array(curr_sims))).statistic
+            results['word_surprisal'][_][cond][cat]['order'] = corr
+            ### simple co-occurrences
+            #corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.array(curr_sims)).statistic
+            #corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.array(curr_sims)).statistic
+
+for mode in ['order', 'rts']:
+    for model, model_data in results.items():
+
+        comp = {s : {cond : numpy.nanmean([cat_data[mode] for cat, cat_data in cond_data.items()]) for cond, cond_data in s_data.items()} for s, s_data in model_data.items()}
+        sham_corr = numpy.nanmean([comp[v]['sham'] for v in sorted(comp.keys())])
+        print('\n')
+        print('{}, {}'.format(model, mode))
+        print('average correlation with sham: {}'.format(sham_corr))
+        print('\n')
+        for sham, other_cond in [
+                      ('sham', 'IFG'),
+                      ('sham', 'preSMA'),
+                      ('sham', 'dual'),
+                      ]:
+
+            res = scipy.stats.wilcoxon([comp[v][sham] for v in sorted(comp.keys())], [comp[v][other_cond] for v in sorted(comp.keys())])
+            print('{}, {}: {}'.format(sham, other_cond, res))
+            print('\n')
+        print('\n\n')
 
 import pdb; pdb.set_trace()
 
