@@ -1,4 +1,5 @@
 import fasttext
+import pingouin
 import matplotlib
 import mne
 import numpy
@@ -68,6 +69,26 @@ def check_vocab(corr_toks, vocab):
         missing = False
     return missing
 
+
+### read dataset
+lines = list()
+#total_rows = list()
+total_rows = -1
+with open(os.path.join('data', 'all_tasks.tsv')) as i:
+    for l_i, l in enumerate(i):
+        l = re.sub(r'\'|\"', r'', l)
+        line = l.strip().split('\t')
+        if l_i == 0:
+            header = line.copy()
+            full_dataset = {h : list() for h in header}
+            continue
+        if line[header.index('task')] != 'sem_fluency':
+            continue
+        for val, h in zip(line, header):
+            full_dataset[h].append(val)
+        total_rows += 1
+#total_rows = l_i
+
 case = 'uncased'
 lang = 'de'
 f = 'wac'
@@ -118,20 +139,6 @@ with open(coocs_file, 'rb') as i:
 ft = fasttext.load_model(os.path.join('/', 'data', 'u_bruera_software', 'word_vectors','de', 'cc.de.300.bin'))
 #ft = fasttext.load_model(os.path.join('..', '..', 'dataset', 'word_vectors', 'de', 'cc.de.300.bin'))
 ft_vocab = {w : w for w in ft.words}
-
-### read dataset
-lines = list()
-with open(os.path.join('data', 'all_tasks.tsv')) as i:
-    for l_i, l in enumerate(i):
-        l = re.sub(r'\'|\"', r'', l)
-        line = l.strip().split('\t')
-        if l_i == 0:
-            header = line.copy()
-            full_dataset = {h : list() for h in header}
-            continue
-        for val, h in zip(line, header):
-            full_dataset[h].append(val)
-total_rows = l_i
 
 ### reading manual correction
 manual_corr_toks = dict()
@@ -201,7 +208,7 @@ with open(os.path.join('data', 'german_stopwords.txt')) as i:
         line = l.strip().lower()
         stopwords.append(line)
 
-rts = {int(sub) : {
+rts = {cat : {
                      task : {
                          cond : {
                                 #cat : list() for cat in set(full_dataset['item'])
@@ -210,9 +217,10 @@ rts = {int(sub) : {
                          }
                      for task in set(full_dataset['task'])
                      }
-                     for sub in set(full_dataset['participant'])
+                     #for sub in set(full_dataset['participant'])
+                     for cat in set(full_dataset['item'])
                      }
-fluencies = {int(sub) : {
+fluencies = {cat : {
                      task : {
                          cond : {
                                 #cat : list() for cat in set(full_dataset['item'])
@@ -221,9 +229,10 @@ fluencies = {int(sub) : {
                          }
                      for task in set(full_dataset['task'])
                      }
-                     for sub in set(full_dataset['participant'])
+                     #for sub in set(full_dataset['participant'])
+                     for cat in set(full_dataset['item'])
                      }
-accuracies = {int(sub) : {
+accuracies = {cat : {
                      task : {
                          cond : {
                                 #cat : list() for cat in set(full_dataset['item'])
@@ -232,32 +241,33 @@ accuracies = {int(sub) : {
                          }
                      for task in set(full_dataset['task'])
                      }
-                     for sub in set(full_dataset['participant'])
+                     #for sub in set(full_dataset['participant'])
+                     for cat in set(full_dataset['item'])
                      }
 
 cats = set()
-for row in tqdm(range(total_rows)):
+for row in range(total_rows):
     sub = int(full_dataset['participant'][row])
     task = full_dataset['task'][row]
     cond = full_dataset['cond'][row]
     cat = full_dataset['item'][row]
-    if 'sem' in task:
-        cats.add(cat)
+    assert 'sem' in task
+    cats.add(cat)
     rt = float(full_dataset['rt'][row])
     word = full_dataset['response'][row].strip()
     accuracy = int(full_dataset['correct'][row].strip())
     if len(word) == 1:
         print(word)
     word = manual_correction(word, stopwords, manual_corr_toks)
-    if cat not in rts[sub][task][cond].keys():
-        rts[sub][task][cond][cat] = list()
-        fluencies[sub][task][cond][cat] = list()
-        accuracies[sub][task][cond][cat] = list()
+    if sub not in rts[cat][task][cond].keys():
+        rts[cat][task][cond][sub] = list()
+        fluencies[cat][task][cond][sub] = list()
+        accuracies[cat][task][cond][sub] = list()
     #rts[sub][task][cond][cat].append(rt)
     ### log10 for rts
-    rts[sub][task][cond][cat].append(numpy.log10(1+rt))
-    fluencies[sub][task][cond][cat].append(word)
-    accuracies[sub][task][cond][cat].append(accuracy)
+    rts[cat][task][cond][sub].append(numpy.log10(1+rt))
+    fluencies[cat][task][cond][sub].append(word)
+    accuracies[cat][task][cond][sub].append(accuracy)
 print(cats)
 
 vecs = dict()
@@ -303,10 +313,11 @@ for row in tqdm(range(total_rows)):
 
 proto_ws = dict()
 
-for _, sub_data in tqdm(fluencies.items()):
-    for cond, cond_data in sub_data['sem_fluency'].items():
-        for cat, words in cond_data.items():
-            curr_accs = accuracies[_]['sem_fluency'][cond][cat]
+#for _, sub_data in tqdm(fluencies.items()):
+for cat, cat_data in tqdm(fluencies.items()):
+    for cond, cond_data in cat_data['sem_fluency'].items():
+        for sub, words in cond_data.items():
+            curr_accs = accuracies[cat]['sem_fluency'][cond][sub]
             for a, w in zip(curr_accs, words):
                 if a == 0:
                     continue
@@ -320,14 +331,15 @@ proto_vecs = {cat : numpy.average([corr_vecs[w] for w in ws], axis=0) for cat, w
 proto_results = dict()
 sims = dict()
 
-for _, sub_data in tqdm(fluencies.items()):
-    for cond, cond_data in sub_data['sem_fluency'].items():
+#for _, sub_data in tqdm(fluencies.items()):
+for cat, cat_data in tqdm(fluencies.items()):
+    for cond, cond_data in cat_data['sem_fluency'].items():
         if cond not in proto_results.keys():
             proto_results[cond] = dict()
-        for cat, words in cond_data.items():
+        for sub, words in cond_data.items():
             if cat not in proto_results[cond].keys():
                 proto_results[cond][cat] = list()
-            curr_rts = rts[_]['sem_fluency'][cond][cat]
+            curr_rts = rts[cat]['sem_fluency'][cond][sub]
             curr_sims = list()
             for w in words:
                 try:
@@ -346,18 +358,19 @@ results = {
            'fasttext' : dict(),
            }
 
-for _, sub_data in tqdm(fluencies.items()):
+#for _, sub_data in tqdm(fluencies.items()):
+for cat, cat_data in tqdm(fluencies.items()):
     for k in results.keys():
-        results[k][_]  = dict()
-    for cond, cond_data in sub_data['sem_fluency'].items():
-        if cond not in results['word_length'][_].keys():
+        results[k][cat]  = dict()
+    for cond, cond_data in cat_data['sem_fluency'].items():
+        if cond not in results['word_length'][cat].keys():
             for k_one in results.keys():
-                results[k_one][_][cond] = dict()
-        for cat, words in cond_data.items():
-            if cat not in results['word_length'][_][cond].keys():
+                results[k_one][cat][cond] = dict()
+        for sub, words in cond_data.items():
+            if sub not in results['word_length'][cat][cond].keys():
                 for k_one in results.keys():
-                    results[k_one][_][cond][cat] = dict()
-            curr_rts = rts[_]['sem_fluency'][cond][cat]
+                    results[k_one][cat][cond][sub] = dict()
+            curr_rts = rts[cat]['sem_fluency'][cond][sub]
             curr_sims = list()
             for w_i, w in enumerate(words):
                 if w_i == 0:
@@ -370,18 +383,18 @@ for _, sub_data in tqdm(fluencies.items()):
             ### fasttext
             ### rts
             corr = scipy.stats.spearmanr(curr_rts[1:], curr_sims).statistic
-            results['fasttext'][_][cond][cat]['rts'] = corr
+            results['fasttext'][cat][cond][sub]['rts'] = corr
             ### order
             corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], curr_sims).statistic
-            results['fasttext'][_][cond][cat]['order'] = corr
+            results['fasttext'][cat][cond][sub]['order'] = corr
             ### length
             lens = [len(w) for w in words[1:]]
             ### rts
             corr = scipy.stats.spearmanr(curr_rts[1:], lens).statistic
-            results['word_length'][_][cond][cat]['rts'] = corr
+            results['word_length'][cat][cond][sub]['rts'] = corr
             ### order
             corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], lens).statistic
-            results['word_length'][_][cond][cat]['order'] = corr
+            results['word_length'][cat][cond][sub]['order'] = corr
             ### frequency
             curr_sims = list()
             for w_i, original_w in enumerate(words):
@@ -397,10 +410,10 @@ for _, sub_data in tqdm(fluencies.items()):
                 curr_sims.append(counter)
             ### rts
             corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.array(curr_sims)).statistic
-            results['neg_word_frequency'][_][cond][cat]['rts'] = corr
+            results['neg_word_frequency'][cat][cond][sub]['rts'] = corr
             ### order
             corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.array(curr_sims)).statistic
-            results['neg_word_frequency'][_][cond][cat]['order'] = corr
+            results['neg_word_frequency'][cat][cond][sub]['order'] = corr
             ### log freq
             #corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.log2(1+numpy.array(curr_sims))).statistic
             #corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.log2(1+numpy.array(curr_sims))).statistic
@@ -426,147 +439,65 @@ for _, sub_data in tqdm(fluencies.items()):
                 curr_sims.append(counter)
             ### rts
             corr = scipy.stats.pearsonr(curr_rts[1:], -numpy.log2(1+numpy.array(curr_sims))).statistic
-            results['word_surprisal'][_][cond][cat]['rts'] = corr
+            results['word_surprisal'][cat][cond][sub]['rts'] = corr
             ### order
             corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.log2(1+numpy.array(curr_sims))).statistic
-            results['word_surprisal'][_][cond][cat]['order'] = corr
+            results['word_surprisal'][cat][cond][sub]['order'] = corr
             ### simple co-occurrences
             #corr = scipy.stats.spearmanr(curr_rts[1:], -numpy.array(curr_sims)).statistic
             #corr = scipy.stats.spearmanr([_ for _ in range(len(curr_rts[1:]))], -numpy.array(curr_sims)).statistic
 
 for mode in ['order', 'rts']:
+    out_f = os.path.join('new_results', 'cat_per_cat', mode)
+    os.makedirs(out_f, exist_ok=True)
     for model, model_data in results.items():
 
-        comp = {s : {cond : [cat_data[mode] for cat, cat_data in cond_data.items()] for cond, cond_data in s_data.items()} for s, s_data in model_data.items()}
-        sham_corr = numpy.nanmean([numpy.nanmean(comp[v]['sham']) for v in sorted(comp.keys())])
-        ifg_corr = numpy.nanmean([numpy.nanmean(comp[v]['IFG']) for v in sorted(comp.keys())])
-        presma_corr = numpy.nanmean([numpy.nanmean(comp[v]['preSMA']) for v in sorted(comp.keys())])
-        dual_corr = numpy.nanmean([numpy.nanmean(comp[v]['dual']) for v in sorted(comp.keys())])
-        print('\n')
-        print('{}, {}'.format(model, mode))
-        print('average correlation with sham: {}'.format(sham_corr))
-        print('average correlation with IFG: {}'.format(ifg_corr))
-        print('average correlation with preSMA: {}'.format(presma_corr))
-        print('average correlation with dual: {}'.format(dual_corr))
-        print('\n')
-        for sham, other_cond in [
-                      ('sham', 'IFG'),
-                      ('sham', 'preSMA'),
-                      ('sham', 'dual'),
-                      ]:
-            '''
-            res = scipy.stats.wilcoxon(
-                                       [c for v in sorted(comp.keys()) for c in comp[v][sham]], 
-                                       [c for v in sorted(comp.keys()) for c in comp[v][other_cond]],
-                                       )
-            print('wilcoxon - {}, {}: {}'.format(sham, other_cond, res.pvalue))
-            '''
-            res = two_samples_permutation(
-                                  [c for v in sorted(comp.keys()) for c in comp[v][sham]], 
-                                  [c for v in sorted(comp.keys()) for c in comp[v][other_cond]],
-                                  hyp='two_tailed',
-                                  )
-            print('permutation - {}, {}: {}'.format(sham, other_cond, res['p_val']))
-            print('\n')
-        print('\n\n')
-
-import pdb; pdb.set_trace()
-
-### writing to file words with wrong spelling
-with open(os.path.join('data', 'to_be_checked.tsv'), 'w') as o:
-    o.write('original_transcription\tcorrected_spelling\tother_variants_(e.g._split_compounds)\n')
-    for w in set(to_be_checked):
-        o.write('{}\tx\tx\tx\tx\n'.format(w))
-
-### averaging word vectors
-vecs = {w : numpy.average(
-                          [
-                           #word_vecs[w],
-                           #lemma_vecs[w],
-                           corr_vecs[w],
-                           ], axis=0) for w in word_vecs.keys()}
-'''
-### z-scoring word vectors
-vecs_means = numpy.average(numpy.array([v for v in vecs.values()]), axis=0)
-vecs_stds = numpy.std(numpy.array([v for v in vecs.values()]), axis=0)
-assert vecs_means.shape == (300,)
-assert vecs_stds.shape == (300,)
-vecs = {k : (v-vecs_means)/vecs_stds for k,v in vecs.items()}
-assert set([v.shape for v in vecs.values()]) == {(300,)}
-'''
-
-all_rts = {cond : dict() for cond in set(full_dataset['cond'])}
-log_all_rts = {cond : dict() for cond in set(full_dataset['cond'])}
-curels = {cond : dict() for cond in set(full_dataset['cond'])}
-seqrels = {cond : dict() for cond in set(full_dataset['cond'])}
-switches = {cond : dict() for cond in set(full_dataset['cond'])}
-temporal_correlations = {cond : dict() for cond in set(full_dataset['cond'])}
-
-### computing thresholds
-thresholds = {'overall' : list()}
-cond_thresholds = dict()
-subject_thresholds = {s : {'overall' : list()} for s in fluencies.keys()}
-for _, sub_data in tqdm(fluencies.items()):
-    for cond, cond_data in sub_data['sem_fluency'].items():
-        for cat, words in cond_data.items():
-            thresholds['overall'].extend(seqrel(words, vecs))
-            subject_thresholds[_]['overall'].extend(seqrel(words, vecs))
-            if cat not in thresholds.keys():
-                thresholds[cat] = list()
-            if cat not in subject_thresholds.keys():
-                subject_thresholds[_][cat] = list()
-            if cond not in cond_thresholds.keys():
-                cond_thresholds[cond] = dict()
-                cond_thresholds[cond]['overall'] = list()
-            if cat not in cond_thresholds[cond].keys():
-                cond_thresholds[cond][cat] = list()
-            thresholds[cat].extend(seqrel(words, vecs))
-            subject_thresholds[_][cat].extend(seqrel(words, vecs))
-            cond_thresholds[cond]['overall'].extend(seqrel(words, vecs))
-            cond_thresholds[cond][cat].extend(seqrel(words, vecs))
-thresholds = {k : numpy.median(v) for k, v in thresholds.items()}
-subject_thresholds = {s : {k : numpy.median(v) for k, v in thresh.items()} for s , thresh in subject_thresholds.items()}
-cond_thresholds = {s : {k : numpy.median(v) for k, v in thresh.items()} for s , thresh in cond_thresholds.items()}
-
-for _, sub_data in tqdm(fluencies.items()):
-    for cond, cond_data in sub_data['sem_fluency'].items():
-        for cat, words in cond_data.items():
-            if cat not in curels[cond].keys():
-                curels[cond][cat] = list()
-                seqrels[cond][cat] = list()
-                switches[cond][cat] = list()
-                temporal_correlations[cond][cat] = list()
-                all_rts[cond][cat] = list()
-                log_all_rts[cond][cat] = list()
-            all_rts[cond][cat].extend(rts[_]['sem_fluency'][cond][cat])
-            log_all_rts[cond][cat].extend([numpy.log(val+1) for val in rts[_]['sem_fluency'][cond][cat]])
-            curels[cond][cat].append(numpy.nanmean(curel(words, vecs)))
-            seqrels[cond][cat].append(numpy.nanmean(seqrel(words, vecs)))
-            ### overall threshold as in Kim et al. 2019
-            #switches[cond][cat].append(switches_and_clusters(words, vecs, thresholds['overall'])[0])
-            ### category-specific threshold as Ocalam et al. 2022
-            ### first is subject
-            switches[cond][cat].append((_, switches_and_clusters(words, vecs, thresholds[cat])[0]))
-            current_rts = rts[_]['sem_fluency'][cond][cat]
-            temporal_correlations[cond][cat].append(temporal_analysis(words, vecs, current_rts))
-
-os.makedirs('pkls', exist_ok=True)
-for d, n in [(switches, 'switches'), (all_rts, 'raw_rts')]:
-    with open(os.path.join('pkls', '{}.pkl'.format(n)), 'wb') as i:
-        pickle.dump(d, i)
-
-txt_folder = os.path.join('results', 'semantic_fluency')
-os.makedirs(txt_folder, exist_ok=True)
-### correlation between switches and RTs
-with open(os.path.join(txt_folder, 'RT-switches_correlations.tsv'), 'w') as o:
-    o.write('condition\tpearson_correlation\tuncorrected_p-value\n')
-    for area, area_switches in switches.items():
-        keys = list(area_switches.keys())
-        corr_switches = [numpy.average(area_switches[k]) for k in keys]
-        corr_rts = [numpy.average(all_rts[area][k]) for k in keys]
-        corr_log_rts = [numpy.average(log_all_rts[area][k]) for k in keys]
-        rt_corr = scipy.stats.pearsonr(corr_switches, corr_rts)
-        o.write('RTs\t{}\t{}\t{}\n'.format(area, round(rt_corr.statistic, 4), rt_corr.pvalue))
-        log_rt_corr = scipy.stats.pearsonr(corr_switches, corr_log_rts)
-        o.write('log(1+RT)\t{}\t{}\t{}\n'.format(area, round(log_rt_corr.statistic, 4), log_rt_corr.pvalue))
-
+        comp = {cat : {cond : [sub_data[mode] for sub, sub_data in cond_data.items()] for cond, cond_data in cat_data.items()} for cat, cat_data in model_data.items()}
+        with open(os.path.join(out_f, 'cat-per-cat_{}_{}.tsv'.format(mode, model)), 'w') as o:
+            o.write('mode\tmodel\tcat\tdifficulty\tsham_corr\tifg_corr\tifg_raw_p\tifg_effsize\tpresma_corr\tpresma_raw_p\tpresma_effsize\tdual_corr\tdual_raw_p\tdual_effsize\n')
+            for cat, cat_data in comp.items():
+                o.write('{}\t{}\t{}\t{}\t'.format(mode, model, cat, sorted_difficulties.index(cat)))
+                sham_corr = numpy.nanmean(cat_data['sham'])
+                o.write('{}\t'.format(sham_corr))
+                corrs = dict()
+                ifg_corr = numpy.nanmean(cat_data['IFG'])
+                corrs['IFG'] = ifg_corr
+                presma_corr = numpy.nanmean(cat_data['preSMA'])
+                corrs['preSMA'] = presma_corr
+                dual_corr = numpy.nanmean(cat_data['dual'])
+                corrs['dual'] = dual_corr
+                print('\n')
+                print('{}, {} - {}'.format(model, mode, cat))
+                print('average correlation with sham: {}'.format(sham_corr))
+                print('average correlation with IFG: {}'.format(ifg_corr))
+                print('average correlation with preSMA: {}'.format(presma_corr))
+                print('average correlation with dual: {}'.format(dual_corr))
+                print('\n')
+                for sham, other_cond in [
+                              ('sham', 'IFG'),
+                              ('sham', 'preSMA'),
+                              ('sham', 'dual'),
+                              ]:
+                    '''
+                    res = scipy.stats.wilcoxon(
+                                               [c for v in sorted(comp.keys()) for c in comp[v][sham]], 
+                                               [c for v in sorted(comp.keys()) for c in comp[v][other_cond]],
+                                               )
+                    print('wilcoxon - {}, {}: {}'.format(sham, other_cond, res.pvalue))
+                    '''
+                    res = two_samples_permutation(
+                                          cat_data['sham'],
+                                          cat_data[other_cond],
+                                          hyp='two_tailed',
+                                          )
+                    o.write('{}\t{}\t'.format(corrs[other_cond], res['p_val']))
+                    eff_size = pingouin.compute_effsize(
+                                                        cat_data['sham'],
+                                                        cat_data[other_cond],
+                                                        eftype='hedges',
+                                                        )
+                    o.write('{}\t'.format(eff_size))
+                    print('permutation - {}, {}: {}'.format(sham, other_cond, res['p_val']))
+                    print('\n')
+                o.write('\n')
+                print('\n\n')
